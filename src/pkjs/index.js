@@ -36,7 +36,7 @@ var state = {
 // ---------------------------------------------------------------------------
 
 function loadSettings() {
-  var s = { serpApiKey: '', omdbApiKey: '', units: 'mi' };
+  var s = { serpApiKey: '', omdbApiKey: '', units: 'mi', cacheHours: DEFAULT_CACHE_HOURS };
   try {
     var raw = localStorage.getItem('settings');
     if (raw) {
@@ -58,8 +58,15 @@ function saveSettings(s) {
 // Bump when the cached payload shape or the parsing changes, to auto-invalidate.
 var CACHE_PREFIX = 'cache:v4:';
 
-var THEATERS_TTL_MS = 24 * 60 * 60 * 1000;  // 24h (also keyed by ~1km location)
-var MOVIES_TTL_MS = 24 * 60 * 60 * 1000;    // 24h (also keyed by date, so expires at midnight)
+var DEFAULT_CACHE_HOURS = 24;
+
+// How long cached responses stay valid. User-settable (6 / 24 / 48h). The
+// theater list is also keyed by ~1km location; showtimes are also keyed by
+// date, so they never outlive midnight regardless of this value.
+function cacheTtlMs() {
+  var h = (state.settings && state.settings.cacheHours) || DEFAULT_CACHE_HOURS;
+  return h * 60 * 60 * 1000;
+}
 
 function today() {
   var d = new Date();
@@ -262,7 +269,7 @@ function fetchTheaters(force) {
 
     var cacheKey = 'theaters:' + coords.lat.toFixed(2) + ',' + coords.lon.toFixed(2);
     if (!force) {
-      var hit = cacheGet(cacheKey, THEATERS_TTL_MS);
+      var hit = cacheGet(cacheKey, cacheTtlMs());
       if (hit && hit.theaters && hit.theaters.length) {
         console.log('theaters: cache hit (' + hit.theaters.length + ')');
         state.city = hit.city;
@@ -349,7 +356,7 @@ function moviesCacheKey(theaterName) {
 
 // Sentinel cached for theaters Google has no showtimes box for, so we stop
 // re-querying them all day.
-var NO_SHOWTIMES = ' none';
+var NO_SHOWTIMES = '__NO_SHOWTIMES__';
 
 // Fetch + parse + rate + cache one theater's showtimes. Does NOT touch
 // state.inFlight or message the watch - the caller decides.
@@ -362,7 +369,7 @@ function loadShowtimes(theater, opts, done) {
   var cacheKey = moviesCacheKey(theater.name);
 
   if (!opts.force) {
-    var hit = cacheGet(cacheKey, MOVIES_TTL_MS);
+    var hit = cacheGet(cacheKey, cacheTtlMs());
     if (hit === NO_SHOWTIMES) {
       done('No showtimes listed for ' + theater.name + ' today.');
       return;
@@ -430,7 +437,7 @@ function fetchMovies(idx, force) {
 
   // Fast path: already cached (possibly by the prefetcher).
   if (!force) {
-    var hit = cacheGet(moviesCacheKey(theater.name), MOVIES_TTL_MS);
+    var hit = cacheGet(moviesCacheKey(theater.name), cacheTtlMs());
     if (hit === NO_SHOWTIMES) {
       sendError('No showtimes listed for ' + theater.name + ' today.');
       return;
@@ -481,7 +488,7 @@ function prefetchShowtimes() {
     }
 
     var t = list[i++];
-    if (cacheGet(moviesCacheKey(t.name), MOVIES_TTL_MS) != null) { next(); return; }
+    if (cacheGet(moviesCacheKey(t.name), cacheTtlMs()) != null) { next(); return; }
 
     console.log('prefetch: ' + t.name);
     loadShowtimes(t, { prefetch: true }, function () {
@@ -600,6 +607,10 @@ Pebble.addEventListener('webviewclosed', function (e) {
   if (incoming.serpApiKey !== undefined) s.serpApiKey = incoming.serpApiKey;
   if (incoming.omdbApiKey !== undefined) s.omdbApiKey = incoming.omdbApiKey;
   if (incoming.units !== undefined) s.units = incoming.units;
+  if (incoming.cacheHours !== undefined) {
+    var ch = parseInt(incoming.cacheHours, 10);
+    if (ch === 6 || ch === 24 || ch === 48) s.cacheHours = ch;  // just a TTL - no refetch needed
+  }
   saveSettings(s);
   state.settings = s;
 

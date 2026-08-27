@@ -13,6 +13,11 @@ function buildConfigPage(settings, usage) {
   var miChecked = s.units === 'km' ? '' : 'checked';
   var kmChecked = s.units === 'km' ? 'checked' : '';
 
+  var ch = parseInt(s.cacheHours, 10) || 24;
+  function opt(v, txt) {
+    return '<option value="' + v + '"' + (ch === v ? ' selected' : '') + '>' + txt + '</option>';
+  }
+
   // --- usage card -----------------------------------------------------------
   var usageRows = '';
   var a = u.account;
@@ -53,6 +58,8 @@ function buildConfigPage(settings, usage) {
     'border-radius:8px;font-size:15px}' +
     '.radios{display:flex;gap:16px;margin-top:4px}.radios label{font-weight:400;display:flex;' +
     'align-items:center;gap:6px;margin:0}' +
+    'select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccc;' +
+    'border-radius:8px;font-size:15px;background:#fff}' +
     'button{width:100%;padding:14px;border:0;border-radius:10px;background:#e64a19;color:#fff;' +
     'font-size:16px;font-weight:600;margin-top:4px}' +
     'a{color:#e64a19}' +
@@ -84,6 +91,14 @@ function buildConfigPage(settings, usage) {
     '<label><input type="radio" name="units" value="km" ' + kmChecked + '> Kilometers</label>' +
     '</div></div>' +
 
+    '<div class="card">' +
+    '<label>Cache showtimes for</label>' +
+    '<div class="hint">Longer = fewer SerpApi searches, older times. Showtimes ' +
+    'always refresh at midnight, and a shake refreshes now.</div>' +
+    '<select id="cache">' +
+    opt(6, '6 hours') + opt(24, '24 hours') + opt(48, '48 hours') +
+    '</select></div>' +
+
     '<button id="save">Save</button>' +
     '</div><script>' +
     'var resetCount=false;' +
@@ -95,6 +110,7 @@ function buildConfigPage(settings, usage) {
     'document.getElementById("save").addEventListener("click",function(){' +
     'var out={serpApiKey:document.getElementById("serp").value.trim(),' +
     'omdbApiKey:document.getElementById("omdb").value.trim(),units:getUnits(),' +
+    'cacheHours:parseInt(document.getElementById("cache").value,10),' +
     'resetCounter:resetCount};' +
     'document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(out));});' +
     '</script></body></html>';
