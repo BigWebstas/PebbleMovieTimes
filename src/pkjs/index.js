@@ -120,10 +120,10 @@ function sendStatus(msg) {
 // HTTP
 // ---------------------------------------------------------------------------
 
-function httpGetJson(url, cb) {
+function httpGetJson(url, cb, timeoutMs) {
   var req = new XMLHttpRequest();
   req.open('GET', url, true);
-  req.timeout = 20000;
+  req.timeout = timeoutMs || 20000;
   req.onload = function () {
     var body = null;
     try { body = JSON.parse(req.responseText); } catch (e) {}
@@ -222,7 +222,7 @@ function fetchTheaters(force) {
         state.theaters = hit.theaters;
         state.inFlight = false;
         sendToWatch({ THEATERS: buildTheaterPayload(hit.theaters, coords) });
-        prefetchShowtimes();
+        setTimeout(prefetchShowtimes, 5000);  // give the user first crack
         return;
       }
     }
@@ -286,7 +286,7 @@ function fetchTheaters(force) {
 
         state.inFlight = false;
         sendToWatch({ THEATERS: buildTheaterPayload(list, coords) });
-        prefetchShowtimes();
+        setTimeout(prefetchShowtimes, 5000);  // give the user first crack
       }
     });
   });
@@ -300,34 +300,51 @@ function moviesCacheKey(theaterName) {
   return 'movies:' + theaterName + ':' + today();
 }
 
+// Sentinel cached for theaters Google has no showtimes box for, so we stop
+// re-querying them all day.
+var NO_SHOWTIMES = ' none';
+
 // Fetch + parse + rate + cache one theater's showtimes. Does NOT touch
-// state.inFlight or message the watch - the caller decides what to do with the
-// result. done(err, payloadString).
-function loadShowtimes(theater, force, done) {
+// state.inFlight or message the watch - the caller decides.
+//   opts.force    - ignore the cache
+//   opts.prefetch - background mode: fewer attempts, shorter timeout, and
+//                   abort the moment a user-driven fetch starts
+// done(err, payloadString)
+function loadShowtimes(theater, opts, done) {
+  opts = opts || {};
   var cacheKey = moviesCacheKey(theater.name);
-  if (!force) {
+
+  if (!opts.force) {
     var hit = cacheGet(cacheKey, MOVIES_TTL_MS);
+    if (hit === NO_SHOWTIMES) {
+      done('No showtimes listed for ' + theater.name + ' today.');
+      return;
+    }
     if (hit != null) { done(null, hit); return; }
   }
 
   var cityShort = state.city ? state.city.split(',')[0] : '';
+  var base = theater.name + (cityShort ? ' ' + cityShort : '');
 
-  // Google only renders the theater showtimes box for some query shapes. The
-  // `location` param is deliberately omitted - SerpApi 400s on strings it can't
-  // resolve, and putting the city in `q` works just as well.
-  var attempts = [
-    theater.name + (cityShort ? ' ' + cityShort : '') + ' showtimes',
-    theater.name + (cityShort ? ' ' + cityShort : ''),
-    theater.name + ' showtimes',
-  ];
+  // Google only renders the showtimes box for some query shapes. `location` is
+  // omitted on purpose (SerpApi 400s on strings it can't resolve); the city
+  // goes in `q` instead.
+  var attempts = opts.prefetch
+    ? [base + ' showtimes', base]
+    : [base + ' showtimes', base, theater.name + ' showtimes'];
+  var timeout = opts.prefetch ? 8000 : 15000;
   var seenKeys = {};
 
   function run(i) {
+    if (opts.prefetch && state.inFlight) { done('aborted'); return; }  // yield to the user
+
     if (i >= attempts.length) {
+      cacheSet(cacheKey, NO_SHOWTIMES);
       var diag = Object.keys(seenKeys).join(',') || 'nothing';
       done('No showtimes for ' + theater.name + '. Google returned: ' + diag);
       return;
     }
+    if (!opts.prefetch && i > 0) sendStatus('Still checking...');  // keep the watch's watchdog fed
     var url = serpUrl({ engine: 'google', q: attempts[i], hl: 'en', gl: 'us' });
 
     httpGetJson(url, function (err, data) {
@@ -336,25 +353,21 @@ function loadShowtimes(theater, force, done) {
         run(i + 1);
         return;
       }
-      console.log('showtimes attempt ' + i + ' keys: ' + Object.keys(data).join(','));
       for (var kk in data) { if (data.hasOwnProperty(kk)) seenKeys[kk] = 1; }
 
-      var st = data.showtimes ||
-        (data.knowledge_graph && data.knowledge_graph.showtimes) ||
-        (data.answer_box && data.answer_box.showtimes);
-      if (st) {
-        try { console.log('showtimes raw: ' + JSON.stringify(st).slice(0, 700)); } catch (e) {}
-      }
-
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
-      if (!movies.length) { run(i + 1); return; }
+      if (!movies.length) {
+        console.log('showtimes attempt ' + i + ': no box (' + Object.keys(data).join(',') + ')');
+        run(i + 1);
+        return;
+      }
 
       attachRatings(movies, function () {
         var payload = buildMoviePayload(movies);
         cacheSet(cacheKey, payload);
         done(null, payload);
       });
-    });
+    }, timeout);
   }
 
   run(0);
@@ -371,6 +384,10 @@ function fetchMovies(idx, force) {
   // Fast path: already cached (possibly by the prefetcher).
   if (!force) {
     var hit = cacheGet(moviesCacheKey(theater.name), MOVIES_TTL_MS);
+    if (hit === NO_SHOWTIMES) {
+      sendError('No showtimes listed for ' + theater.name + ' today.');
+      return;
+    }
     if (hit != null) {
       console.log('showtimes: cache hit for ' + theater.name);
       sendToWatch({ MOVIES: hit });
@@ -382,22 +399,22 @@ function fetchMovies(idx, force) {
   state.inFlight = true;
   sendStatus('Fetching showtimes...');
 
-  loadShowtimes(theater, force, function (err, payload) {
+  loadShowtimes(theater, { force: force }, function (err, payload) {
     state.inFlight = false;
     if (err) { sendError(err); return; }
     sendToWatch({ MOVIES: payload });
-    prefetchShowtimes();  // warm the rest of the list while we're here
+    setTimeout(prefetchShowtimes, 3000);  // resume warming the rest of the list
   });
 }
 
 // ---------------------------------------------------------------------------
 // Prefetch: after the theater list is shown, quietly warm every theater's
-// showtimes into the cache so opening one is instant. One SerpApi search per
-// uncached theater; requests are spaced out and yield to user-driven fetches.
+// showtimes into the cache. One SerpApi search per uncached theater, spaced
+// out, and it bails entirely whenever the user opens a theater.
 // ---------------------------------------------------------------------------
 
 function prefetchShowtimes() {
-  if (state.prefetching) return;
+  if (state.prefetching || state.inFlight) return;
   if (!state.settings || !state.settings.serpApiKey) return;
 
   var list = state.theaters.slice();
@@ -410,14 +427,18 @@ function prefetchShowtimes() {
       console.log('prefetch: done');
       return;
     }
-    if (state.inFlight) { setTimeout(next, 2500); return; }  // let the user go first
+    if (state.inFlight) {                    // user is fetching - stop, resume later
+      state.prefetching = false;
+      console.log('prefetch: paused for user');
+      return;
+    }
 
     var t = list[i++];
     if (cacheGet(moviesCacheKey(t.name), MOVIES_TTL_MS) != null) { next(); return; }
 
     console.log('prefetch: ' + t.name);
-    loadShowtimes(t, false, function () {
-      setTimeout(next, 1500);
+    loadShowtimes(t, { prefetch: true }, function () {
+      setTimeout(next, 2500);
     });
   }
 
@@ -485,11 +506,19 @@ Pebble.addEventListener('ready', function () {
   fetchTheaters(false);
 });
 
+var lastTheatersReq = 0;
+
 Pebble.addEventListener('appmessage', function (e) {
   var d = e.payload || {};
   var force = !!d.FORCE;
-  if (d.REQUEST === 'theaters') fetchTheaters(force);
-  else if (d.REQUEST === 'movies') fetchMovies(d.THEATER_IDX, force);
+  if (d.REQUEST === 'theaters') {
+    var now = Date.now();
+    if (now - lastTheatersReq < 3000) { console.log('ignoring rapid theaters request'); return; }
+    lastTheatersReq = now;
+    fetchTheaters(force);
+  } else if (d.REQUEST === 'movies') {
+    fetchMovies(d.THEATER_IDX, force);
+  }
 });
 
 Pebble.addEventListener('showConfiguration', function () {

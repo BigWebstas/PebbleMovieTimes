@@ -14,6 +14,9 @@ int     g_movie_count = 0;
 AppState g_state = STATE_LOADING_THEATERS;
 char     g_error_msg[128] = {0};
 
+static void watchdog_start(void);
+static void watchdog_stop(void);
+
 // ---------------------------------------------------------------------------
 // Small parsing helpers
 // ---------------------------------------------------------------------------
@@ -97,6 +100,7 @@ static void parse_movies(const char *payload) {
 static void inbox_received(DictionaryIterator *iter, void *context) {
   Tuple *err = dict_find(iter, MESSAGE_KEY_ERROR);
   if (err && err->type == TUPLE_CSTRING && err->length > 1) {
+    watchdog_stop();
     g_state = STATE_ERROR;
     strncpy(g_error_msg, err->value->cstring, sizeof(g_error_msg) - 1);
     g_error_msg[sizeof(g_error_msg) - 1] = '\0';
@@ -107,7 +111,9 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
 
   Tuple *status = dict_find(iter, MESSAGE_KEY_STATUS);
   if (status && status->type == TUPLE_CSTRING) {
-    // Optional progress text ("Locating…", "Fetching showtimes…")
+    // Optional progress text ("Locating…", "Fetching showtimes…") - the phone
+    // is alive and working, so give it a fresh timeout window.
+    watchdog_start();
     strncpy(g_error_msg, status->value->cstring, sizeof(g_error_msg) - 1);
     g_error_msg[sizeof(g_error_msg) - 1] = '\0';
     theaters_window_reload();
@@ -116,6 +122,7 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
 
   Tuple *theaters = dict_find(iter, MESSAGE_KEY_THEATERS);
   if (theaters && theaters->type == TUPLE_CSTRING) {
+    watchdog_stop();
     parse_theaters(theaters->value->cstring);
     favorites_apply();
     g_state = STATE_THEATERS;
@@ -125,6 +132,7 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
 
   Tuple *movies = dict_find(iter, MESSAGE_KEY_MOVIES);
   if (movies && movies->type == TUPLE_CSTRING) {
+    watchdog_stop();
     parse_movies(movies->value->cstring);
     g_state = STATE_MOVIES;
     g_error_msg[0] = '\0';
@@ -148,6 +156,30 @@ static void outbox_failed(DictionaryIterator *iter, AppMessageResult reason, voi
 // Actions
 // ---------------------------------------------------------------------------
 
+// Watchdog: if the phone doesn't answer a request in time, surface an error
+// instead of leaving the watch on a loading screen forever.
+#define LOAD_TIMEOUT_MS 50000
+static AppTimer *s_watchdog = NULL;
+
+static void watchdog_fire(void *ctx) {
+  s_watchdog = NULL;
+  if (g_state == STATE_LOADING_THEATERS || g_state == STATE_LOADING_MOVIES) {
+    g_state = STATE_ERROR;
+    snprintf(g_error_msg, sizeof(g_error_msg), "No response from phone.\nTry again.");
+    theaters_window_reload();
+    movies_window_reload();
+  }
+}
+
+static void watchdog_start(void) {
+  if (s_watchdog) app_timer_cancel(s_watchdog);
+  s_watchdog = app_timer_register(LOAD_TIMEOUT_MS, watchdog_fire, NULL);
+}
+
+static void watchdog_stop(void) {
+  if (s_watchdog) { app_timer_cancel(s_watchdog); s_watchdog = NULL; }
+}
+
 void request_theaters(bool force) {
   g_state = STATE_LOADING_THEATERS;
   g_error_msg[0] = '\0';
@@ -158,6 +190,7 @@ void request_theaters(bool force) {
   dict_write_cstring(out, MESSAGE_KEY_REQUEST, "theaters");
   dict_write_int32(out, MESSAGE_KEY_FORCE, force ? 1 : 0);
   app_message_outbox_send();
+  watchdog_start();
 }
 
 void request_movies(int theater_idx, bool force) {
@@ -173,6 +206,7 @@ void request_movies(int theater_idx, bool force) {
   dict_write_int32(out, MESSAGE_KEY_THEATER_IDX, theater_idx);
   dict_write_int32(out, MESSAGE_KEY_FORCE, force ? 1 : 0);
   app_message_outbox_send();
+  watchdog_start();
 }
 
 // ---------------------------------------------------------------------------

@@ -113,8 +113,13 @@ static void long_select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
 }
 
 // Shake the watch to force a fresh fetch (bypasses the phone-side cache).
+static time_t s_last_shake = 0;
+
 static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
   if (g_state == STATE_LOADING_THEATERS) return;
+  time_t now = time(NULL);
+  if (now - s_last_shake < 5) return;   // one shake can fire several taps
+  s_last_shake = now;
   request_theaters(true);
 }
 
