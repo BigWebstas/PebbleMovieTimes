@@ -5,6 +5,8 @@
 static Window *s_window;
 static MenuLayer *s_menu;
 static StatusBarLayer *s_status;
+static Layer *s_splash;      // logo + text, shown only during the first load
+static GBitmap *s_logo;
 
 // The theater list stays usable even while a movie fetch is in progress (or
 // errored) on top of it — otherwise navigating back lands on a blank loader.
@@ -123,6 +125,41 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
   request_theaters(true);
 }
 
+// ---- Splash (logo + text) shown during the very first load --------------
+
+static void splash_update(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, b, 0, GCornerNone);
+
+  int16_t text_y = b.size.h / 3;
+  if (s_logo) {
+    GRect lr = gbitmap_get_bounds(s_logo);
+    int16_t top = b.size.h / 3 - lr.size.h / 2 - 4;
+    GRect dst = GRect((b.size.w - lr.size.w) / 2, top, lr.size.w, lr.size.h);
+    graphics_context_set_compositing_mode(ctx, GCompOpSet);
+    graphics_draw_bitmap_in_rect(ctx, s_logo, dst);
+    text_y = top + lr.size.h + 10;
+  }
+
+  const char *msg = g_error_msg[0] ? g_error_msg : "Finding theaters near you…";
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, msg, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                     GRect(6, text_y, b.size.w - 12, b.size.h - text_y - 6),
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+}
+
+static void update_splash_visibility(void) {
+  if (s_splash) {
+    // Logo screen while there's no list to show: the first load, or an error
+    // before any theaters loaded. (Select still retries via the menu beneath.)
+    bool show = (g_state == STATE_LOADING_THEATERS) ||
+                (g_state == STATE_ERROR && g_theater_count == 0);
+    layer_set_hidden(s_splash, !show);
+    layer_mark_dirty(s_splash);
+  }
+}
+
 // ---- Window lifecycle ----------------------------------------------------
 
 static void window_load(Window *window) {
@@ -151,24 +188,35 @@ static void window_load(Window *window) {
   menu_layer_set_highlight_colors(s_menu, GColorJaegerGreen, GColorWhite);
 #endif
 
+  s_logo = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_LOGO);
+  s_splash = layer_create(menu_frame);
+  layer_set_update_proc(s_splash, splash_update);
+
   layer_add_child(root, menu_layer_get_layer(s_menu));
+  layer_add_child(root, s_splash);
   layer_add_child(root, status_bar_layer_get_layer(s_status));
 
+  update_splash_visibility();
   accel_tap_service_subscribe(accel_tap_handler);
 }
 
 static void window_unload(Window *window) {
   accel_tap_service_unsubscribe();
+  layer_destroy(s_splash);
+  gbitmap_destroy(s_logo);
   menu_layer_destroy(s_menu);
   status_bar_layer_destroy(s_status);
   s_window = NULL;
   s_menu = NULL;
+  s_splash = NULL;
+  s_logo = NULL;
 }
 
 void theaters_window_reload(void) {
   if (s_menu) {
     menu_layer_reload_data(s_menu);
   }
+  update_splash_visibility();
 }
 
 void theaters_window_push(void) {
