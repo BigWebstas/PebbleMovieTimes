@@ -1,0 +1,6 @@
+build/
+.idea/
+.lock-waf*
+node_modules/
+*.pbw
+.pebble-cache/

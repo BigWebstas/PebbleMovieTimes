@@ -1,0 +1,39 @@
+{
+  "name": "pebble-movie-times",
+  "author": "jwebstas",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Movie Times",
+    "uuid": "44f67b0d-81b5-46d1-9786-be7228c1f12a",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
+    "messageKeys": [
+      "REQUEST",
+      "THEATER_IDX",
+      "THEATERS",
+      "MOVIES",
+      "ERROR",
+      "STATUS"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}
