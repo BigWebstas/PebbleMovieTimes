@@ -30,21 +30,26 @@ function distanceStr(lat1, lon1, lat2, lon2, units) {
   return mi.toFixed(mi < 10 ? 1 : 0) + ' mi';
 }
 
-var CINEMA_RE = /cinema|cineplex|movie theat|cinemas?\b|multiplex|megaplex|drive-?in/i;
-var CHAIN_RE = /\b(amc|regal|cinemark|cinepolis|cin[eé]polis|megaplex|marcus|harkins|showcase|odeon|vue|picturehouse|alamo drafthouse|landmark|ipic|studio movie grill|emagine|maya cinemas|bow tie|reading cinemas|cmx|b&b theatres|malco|santikos|violet crown|look dine-in)\b/i;
-var NOT_CINEMA_RE = /amphitheat|performing arts|concert|live music|playhouse|opera|symphony|orchestra|philharmon|ballet|stadium|\barena\b|fairground|convention center|community theat|dinner theat|repertory|shakespear|hale cent|children'?s theat|black box|little theat|\btheat(re|er) compan|civic (center|theat)/i;
+var CINEMA_NAME_RE = /\b(cinemas?|cineplex|multiplex|megaplex|movie theat(re|er))\b/i;
+var CHAIN_RE = /\b(amc|regal|cinemark|cinepolis|cin[eé]polis|megaplex|marcus|harkins|showcase|odeon|vue|picturehouse|alamo drafthouse|landmark|ipic|studio movie grill|emagine|maya cinemas|bow tie|reading cinemas|cmx|malco|santikos|violet crown|fat ?cats|look dine-in|cinepolis)\b/i;
 
-// Does a place look like an actual movie theater (vs. an amphitheater, live
-// venue, playhouse, etc. that Google Maps also returns for "movie theater")?
+// Reject by name/type: live venues, playhouses, and — crucially — service
+// businesses that Google Maps returns for "movie theater" (equipment makers,
+// A/V installers, video production).
+var NOT_CINEMA_RE = /amphitheat|performing arts|concert|live music|playhouse|opera|symphony|orchestra|philharmon|ballet|stadium|\barena\b|fairground|convention center|community theat|dinner theat|repertory|shakespear|hale cent|children'?s theat|black box|little theat|\btheat(re|er) (compan|troupe|guild)|\bplayers\b|civic (center|theat)|manufacturer|production (service|compan)|installation|home cinema|audio.?visual|integrator|\bequipment\b|\brental\b|contractor/i;
+
+// google_maps categorises real movie theaters as exactly "Movie theater".
+var CINEMA_TYPE_RE = /^movie theater$|drive-?in theater/i;
+
+// Does this google_maps result look like an actual movie theater?
 function looksLikeCinema(name, type) {
   name = String(name || '').trim();
-  type = String(type || '');
-  if (name.length < 4) return false;                  // "IMAX", junk
+  type = String(type || '').trim();
+  if (name.length < 4) return false;                       // "IMAX", junk
   if (NOT_CINEMA_RE.test(name) || NOT_CINEMA_RE.test(type)) return false;
-  if (/movie theater|cinema|multiplex/i.test(type)) return true;  // Google's own category
-  if (CINEMA_RE.test(name) || CHAIN_RE.test(name)) return true;
-  if (/theat/i.test(type)) return false;   // "Performing arts theater", "Live theater" -> not a cinema
-  return false;                             // strict: unknown type + generic name -> drop
+  if (CINEMA_TYPE_RE.test(type)) return true;              // trust Google's category
+  if (type) return CHAIN_RE.test(name);                    // other type: only a known chain
+  return CINEMA_NAME_RE.test(name) || CHAIN_RE.test(name); // no type: name heuristics
 }
 
 // data.local_results / data.place_results  ->  [{ name, lat, lon, rating, address, type }]

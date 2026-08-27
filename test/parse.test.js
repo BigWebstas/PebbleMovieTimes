@@ -72,6 +72,21 @@ t('extractTheaters drops playhouses, live theaters and junk names', function () 
   var names = P.extractTheaters(data).map(function (t) { return t.name; });
   assert.deepStrictEqual(names, ['AMC Classic Orem 8']);
 });
+t('extractTheaters drops A/V service businesses (real google_maps data)', function () {
+  var data = { local_results: [
+    { title: 'Cinemark American Fork', type: 'Movie theater',
+      gps_coordinates: { latitude: 40.4, longitude: -111.8 } },
+    { title: 'IMAX', type: 'IMAX theater' },
+    { title: 'Open Air Cinema', type: 'Manufacturer' },
+    { title: 'Mystery Box | Digital Cinema Co.', type: 'Video production service' },
+    { title: 'The Wired Guys', type: 'Home cinema installation' },
+    { title: 'The Ruth and Nathan Hale Theater', type: 'Theater company' },
+    { title: 'FatCats Saratoga Springs', type: 'Movie theater',
+      gps_coordinates: { latitude: 40.35, longitude: -111.9 } },
+  ] };
+  var names = P.extractTheaters(data).map(function (t) { return t.name; });
+  assert.deepStrictEqual(names, ['Cinemark American Fork', 'FatCats Saratoga Springs']);
+});
 
 // --- showing flattening ---------------------------------------------------
 t('flattenShowing with time arrays and formats', function () {

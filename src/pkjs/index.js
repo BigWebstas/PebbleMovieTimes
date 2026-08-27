@@ -56,7 +56,7 @@ function saveSettings(s) {
 // ---------------------------------------------------------------------------
 
 // Bump when the cached payload shape or the parsing changes, to auto-invalidate.
-var CACHE_PREFIX = 'cache:v3:';
+var CACHE_PREFIX = 'cache:v4:';
 
 var THEATERS_TTL_MS = 24 * 60 * 60 * 1000;  // 24h (also keyed by ~1km location)
 var MOVIES_TTL_MS = 24 * 60 * 60 * 1000;    // 24h (also keyed by date, so expires at midnight)
