@@ -117,6 +117,7 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   Tuple *theaters = dict_find(iter, MESSAGE_KEY_THEATERS);
   if (theaters && theaters->type == TUPLE_CSTRING) {
     parse_theaters(theaters->value->cstring);
+    favorites_apply();
     g_state = STATE_THEATERS;
     g_error_msg[0] = '\0';
     theaters_window_reload();
@@ -177,6 +178,8 @@ void request_movies(int theater_idx) {
 // ---------------------------------------------------------------------------
 
 static void init(void) {
+  favorites_load();
+
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);

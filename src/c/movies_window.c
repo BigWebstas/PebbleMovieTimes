@@ -117,6 +117,7 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   status_bar_layer_destroy(s_status);
+  window_destroy(window);
   s_window = NULL;
   s_menu = NULL;
 }

@@ -16,6 +16,7 @@ typedef struct {
   char name[NAME_LEN];
   char rating[RATING_LEN];   // Google star rating, e.g. "4.3" (may be empty)
   char distance[DIST_LEN];   // e.g. "1.2 mi" (may be empty)
+  bool favorite;             // pinned to the top of the list by the user
 } Theater;
 
 typedef struct {
@@ -46,6 +47,12 @@ extern char     g_error_msg[128];
 // --- actions (main.c) ---
 void request_theaters(void);
 void request_movies(int theater_idx);
+
+// --- favorites (favorites.c) ---
+void favorites_load(void);              // read persisted favorites into memory
+void favorites_apply(void);             // set .favorite flags + sort pinned to top
+void favorites_toggle(int theater_idx); // flip pin state for g_theaters[idx], persist, re-apply
+bool favorites_is_pinned(const char *name);
 
 // --- windows ---
 void theaters_window_push(void);

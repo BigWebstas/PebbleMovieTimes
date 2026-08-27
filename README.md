@@ -5,17 +5,21 @@ you, then shows each theater's movies, today's showtimes, and IMDb ratings.
 
 ```
 Theaters near you        ->   AMC Empire 25            ->   Dune: Part Two
-  AMC Empire 25                 Dune: Part Two               IMDb 8.5
-  ★ 4.1 • 0.3 mi                IMDb 8.5 • 12:00pm...        12:00pm
-  Regal Union Square           Kung Fu Panda 4              3:30pm
-  ★ 4.0 • 0.6 mi               IMDb 6.4 • 11:15am...        IMAX 7:00pm
+★ AMC Empire 25               Dune: Part Two               IMDb 8.5
+  4.1★ • 0.3 mi                IMDb 8.5 • 12:00pm...        12:00pm
+  Regal Union Square          Kung Fu Panda 4              3:30pm
+  4.0★ • 0.6 mi                IMDb 6.4 • 11:15am...        IMAX 7:00pm
 ```
+
+**Select** opens a theater; **long-press Select** pins it as a favorite (★) so
+it stays at the top of the list. Favorites persist on the watch.
 
 ## How it works
 
 | Piece | Role |
 |-------|------|
 | `src/c/*` | The watchapp: three menu screens (theaters → movies → showtimes). |
+| `src/c/favorites.c` | Pin/unpin theaters; persisted with `persist_*`. |
 | `src/pkjs/index.js` | Runs on the phone. Gets GPS, calls the APIs, streams results to the watch. |
 | `src/pkjs/parse.js` | Pure response-parsing helpers (unit tested). |
 | `src/pkjs/config_page.js` | The settings screen (self-contained, no hosting needed). |

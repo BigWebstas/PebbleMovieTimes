@@ -239,42 +239,40 @@ function fetchMovies(idx) {
   sendStatus('Fetching showtimes...');
 
   var cityShort = state.city ? state.city.split(',')[0] : '';
-  var q = theater.name + (cityShort ? ' ' + cityShort : '') + ' showtimes';
 
-  // SerpApi's `location` must match a place in their locations DB; a raw
-  // reverse-geocoded string sometimes doesn't, which returns HTTP 400. So try
-  // with `location` first, then fall back to a location-free query.
-  function run(withLocation) {
-    var url = serpUrl({
-      engine: 'google',
-      q: q,
-      location: withLocation ? (state.city || null) : null,
-      hl: 'en',
-      gl: 'us',
-    });
+  // Try a few query / param shapes: Google only renders the theater showtimes
+  // box for some of them, and SerpApi's `location` 400s on unknown strings.
+  var attempts = [
+    { q: theater.name + (cityShort ? ' ' + cityShort : ''), location: state.city || null },
+    { q: theater.name + (cityShort ? ' ' + cityShort : ''), location: null },
+  ];
+
+  function run(i) {
+    if (i >= attempts.length) {
+      sendError('No showtimes listed for ' + theater.name + ' today.');
+      return;
+    }
+    var a = attempts[i];
+    var url = serpUrl({ engine: 'google', q: a.q, location: a.location, hl: 'en', gl: 'us' });
 
     httpGetJson(url, function (err, data) {
-      if (err) {
-        if (withLocation) { console.log('showtimes retry without location'); run(false); return; }
-        sendError(err);
-        return;
-      }
-      if (data.error) {
-        if (withLocation) { console.log('showtimes retry without location'); run(false); return; }
-        sendError(data.error);
+      if (err || (data && data.error)) {
+        console.log('showtimes attempt ' + i + ' failed: ' + (err || data.error));
+        run(i + 1);
         return;
       }
 
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
       if (!movies.length) {
-        sendError('No showtimes listed for ' + theater.name + ' today.');
+        console.log('showtimes attempt ' + i + ' keys: ' + Object.keys(data).join(','));
+        run(i + 1);
         return;
       }
       attachRatingsThenSend(movies);
     });
   }
 
-  run(!!state.city);
+  run(0);
 }
 
 // ---------------------------------------------------------------------------

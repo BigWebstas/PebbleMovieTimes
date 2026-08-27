@@ -6,8 +6,10 @@ static Window *s_window;
 static MenuLayer *s_menu;
 static StatusBarLayer *s_status;
 
+// The theater list stays usable even while a movie fetch is in progress (or
+// errored) on top of it — otherwise navigating back lands on a blank loader.
 static bool is_list_ready(void) {
-  return g_state == STATE_THEATERS && g_theater_count > 0;
+  return g_theater_count > 0 && g_state != STATE_LOADING_THEATERS;
 }
 
 // ---- MenuLayer callbacks ---------------------------------------------------
@@ -48,18 +50,25 @@ static void draw_row(GContext *gctx, const Layer *cell_layer, MenuIndex *idx, vo
 
   Theater *t = &g_theaters[idx->row];
 
+  char title[NAME_LEN + 4];
+  if (t->favorite) {
+    snprintf(title, sizeof(title), "★ %s", t->name);   // ★ pinned
+  } else {
+    snprintf(title, sizeof(title), "%s", t->name);
+  }
+
   char subtitle[40];
   if (t->rating[0] && t->distance[0]) {
-    snprintf(subtitle, sizeof(subtitle), "★ %s  •  %s", t->rating, t->distance);
+    snprintf(subtitle, sizeof(subtitle), "%s★  •  %s", t->rating, t->distance);
   } else if (t->rating[0]) {
-    snprintf(subtitle, sizeof(subtitle), "★ %s", t->rating);
+    snprintf(subtitle, sizeof(subtitle), "Rated %s", t->rating);
   } else if (t->distance[0]) {
     snprintf(subtitle, sizeof(subtitle), "%s", t->distance);
   } else {
     subtitle[0] = '\0';
   }
 
-  menu_cell_basic_draw(gctx, cell_layer, t->name, subtitle[0] ? subtitle : NULL, NULL);
+  menu_cell_basic_draw(gctx, cell_layer, title, subtitle[0] ? subtitle : NULL, NULL);
 }
 
 static void select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
@@ -69,6 +78,27 @@ static void select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
   }
   request_movies(idx->row);
   movies_window_push();
+}
+
+// Long-press toggles a theater as a favorite (pinned to the top, persisted).
+static void long_select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
+  if (!is_list_ready()) return;
+
+  char name[NAME_LEN];
+  strncpy(name, g_theaters[idx->row].name, sizeof(name));
+  name[NAME_LEN - 1] = '\0';
+
+  favorites_toggle(idx->row);
+  vibes_short_pulse();
+  menu_layer_reload_data(menu);
+
+  // Keep the cursor on the same theater after it is re-sorted.
+  for (int i = 0; i < g_theater_count; i++) {
+    if (strcmp(g_theaters[i].name, name) == 0) {
+      menu_layer_set_selected_index(menu, MenuIndex(0, i), MenuRowAlignCenter, false);
+      break;
+    }
+  }
 }
 
 // ---- Window lifecycle ----------------------------------------------------
@@ -92,6 +122,7 @@ static void window_load(Window *window) {
     .get_cell_height = get_cell_height,
     .draw_row = draw_row,
     .select_click = select_row,
+    .select_long_click = long_select_row,
   });
   menu_layer_set_click_config_onto_window(s_menu, window);
 #if defined(PBL_COLOR)

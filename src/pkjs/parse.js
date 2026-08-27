@@ -76,7 +76,8 @@ function flattenShowing(showing) {
 // data.showtimes -> [{ title, times }] for today (or the first day available)
 function extractMovies(data) {
   var out = [];
-  var blocks = data && data.showtimes;
+  var blocks = (data && data.showtimes) ||
+    (data && data.answer_box && data.answer_box.showtimes) || null;
   if (!blocks || !blocks.length) return out;
 
   var block = null;
