@@ -49,8 +49,17 @@ theater is instant for the rest of the day. This trades API calls for
 speed — with SerpApi's 100/month free tier you'll want a paid plan; drop
 `prefetchShowtimes()` from `fetchTheaters` to disable it.
 
-**Shake the watch** on the theater screen to force a fresh fetch; changing
-settings also clears the cache.
+**Shake the watch** on the theater screen to force a fresh fetch; changing the
+key or units also clears the cache.
+
+Theaters Google has no showtimes box for are remembered ("no showtimes") so
+they aren't re-queried all day.
+
+### Usage
+
+The settings page shows a **SerpApi usage** card: your real plan usage pulled
+from SerpApi's `/account` endpoint (free, doesn't touch the quota), plus a
+local tally of searches this app has made, with a Reset link.
 
 ## Setup
 
