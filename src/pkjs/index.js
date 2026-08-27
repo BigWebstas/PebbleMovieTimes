@@ -28,6 +28,7 @@ var state = {
   coords: null,     // { lat, lon }
   theaters: [],      // from P.extractTheaters, sorted by distance
   inFlight: false,
+  moviesCacheKey: null,  // set while a showtimes fetch is running, so sendMovies can cache it
 };
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,45 @@ function loadSettings() {
 
 function saveSettings(s) {
   try { localStorage.setItem('settings', JSON.stringify(s)); } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// Response cache (localStorage). Keeps SerpApi calls off the 100/month quota.
+// ---------------------------------------------------------------------------
+
+var THEATERS_TTL_MS = 3 * 60 * 60 * 1000;  // 3 hours
+var MOVIES_TTL_MS = 6 * 60 * 60 * 1000;    // 6 hours (and keyed by date)
+
+function today() {
+  var d = new Date();
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+function cacheGet(key, ttlMs) {
+  try {
+    var raw = localStorage.getItem('cache:' + key);
+    if (!raw) return null;
+    var o = JSON.parse(raw);
+    if (!o || (Date.now() - o.t) > ttlMs) return null;
+    return o.v;
+  } catch (e) { return null; }
+}
+
+function cacheSet(key, value) {
+  try {
+    localStorage.setItem('cache:' + key, JSON.stringify({ t: Date.now(), v: value }));
+  } catch (e) { /* quota / private mode - just skip caching */ }
+}
+
+function clearCache() {
+  try {
+    var kill = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('cache:') === 0) kill.push(k);
+    }
+    for (var j = 0; j < kill.length; j++) localStorage.removeItem(kill[j]);
+  } catch (e) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +183,20 @@ function reverseGeocode(lat, lon, cb) {
 // Step 1: nearby theaters
 // ---------------------------------------------------------------------------
 
-function fetchTheaters() {
+function buildTheaterPayload(list, coords) {
+  var units = state.settings.units || 'mi';
+  var payload = '';
+  for (var k = 0; k < list.length; k++) {
+    var t = list[k];
+    var dist = (t.lat != null && t.lon != null)
+      ? P.distanceStr(coords.lat, coords.lon, t.lat, t.lon, units) : '';
+    if (k) payload += REC;
+    payload += P.sanitize(t.name) + FLD + (t.rating || '') + FLD + dist;
+  }
+  return payload;
+}
+
+function fetchTheaters(force) {
   if (state.inFlight) return;
   state.settings = loadSettings();
   if (!state.settings.serpApiKey) {
@@ -156,6 +209,20 @@ function fetchTheaters() {
   getLocation(function (err, coords) {
     if (err) { sendError(err); return; }
     state.coords = coords;
+
+    var cacheKey = 'theaters:' + coords.lat.toFixed(2) + ',' + coords.lon.toFixed(2);
+    if (!force) {
+      var hit = cacheGet(cacheKey, THEATERS_TTL_MS);
+      if (hit && hit.theaters && hit.theaters.length) {
+        console.log('theaters: cache hit (' + hit.theaters.length + ')');
+        state.city = hit.city;
+        state.theaters = hit.theaters;
+        state.inFlight = false;
+        sendToWatch({ THEATERS: buildTheaterPayload(hit.theaters, coords) });
+        return;
+      }
+    }
+
     sendStatus('Finding theaters near you...');
 
     reverseGeocode(coords.lat, coords.lon, function (city) {
@@ -205,18 +272,10 @@ function fetchTheaters() {
         state.theaters = list;
         console.log('Movie Times: ' + list.length + ' theaters near ' + (state.city || 'you'));
 
-        var units = state.settings.units || 'mi';
-        var payload = '';
-        for (var k = 0; k < list.length; k++) {
-          var t = list[k];
-          var dist = (t.lat != null && t.lon != null)
-            ? P.distanceStr(coords.lat, coords.lon, t.lat, t.lon, units) : '';
-          if (k) payload += REC;
-          payload += P.sanitize(t.name) + FLD + t.rating + FLD + dist;
-        }
+        cacheSet(cacheKey, { city: state.city, theaters: list });
 
         state.inFlight = false;
-        sendToWatch({ THEATERS: payload });
+        sendToWatch({ THEATERS: buildTheaterPayload(list, coords) });
       }
     });
   });
@@ -226,7 +285,7 @@ function fetchTheaters() {
 // Step 2: showtimes for one theater
 // ---------------------------------------------------------------------------
 
-function fetchMovies(idx) {
+function fetchMovies(idx, force) {
   if (state.inFlight) return;
   idx = idx | 0;
   var theater = state.theaters[idx];
@@ -235,21 +294,35 @@ function fetchMovies(idx) {
   state.settings = loadSettings();
   if (!state.settings.serpApiKey) { sendError('Add your SerpApi key in settings.'); return; }
 
+  var cacheKey = 'movies:' + theater.name + ':' + today();
+  if (!force) {
+    var hit = cacheGet(cacheKey, MOVIES_TTL_MS);
+    if (hit != null) {
+      console.log('showtimes: cache hit for ' + theater.name);
+      sendToWatch({ MOVIES: hit });
+      return;
+    }
+  }
+
   state.inFlight = true;
+  state.moviesCacheKey = cacheKey;
   sendStatus('Fetching showtimes...');
 
   var cityShort = state.city ? state.city.split(',')[0] : '';
 
-  // Try a few query / param shapes: Google only renders the theater showtimes
-  // box for some of them, and SerpApi's `location` 400s on unknown strings.
+  // Google only renders the theater showtimes box for some query shapes, and
+  // SerpApi's `location` param 400s on strings it doesn't recognise.
   var attempts = [
+    { q: theater.name, location: null },
     { q: theater.name + (cityShort ? ' ' + cityShort : ''), location: state.city || null },
-    { q: theater.name + (cityShort ? ' ' + cityShort : ''), location: null },
+    { q: theater.name + ' showtimes', location: null },
   ];
+  var seenKeys = {};
 
   function run(i) {
     if (i >= attempts.length) {
-      sendError('No showtimes listed for ' + theater.name + ' today.');
+      var diag = Object.keys(seenKeys).join(',') || 'nothing';
+      sendError('No showtimes for ' + theater.name + '. Google returned: ' + diag);
       return;
     }
     var a = attempts[i];
@@ -261,13 +334,12 @@ function fetchMovies(idx) {
         run(i + 1);
         return;
       }
+      var k = Object.keys(data).join(',');
+      console.log('showtimes attempt ' + i + ' keys: ' + k);
+      for (var kk in data) { if (data.hasOwnProperty(kk)) seenKeys[kk] = 1; }
 
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
-      if (!movies.length) {
-        console.log('showtimes attempt ' + i + ' keys: ' + Object.keys(data).join(','));
-        run(i + 1);
-        return;
-      }
+      if (!movies.length) { run(i + 1); return; }
       attachRatingsThenSend(movies);
     });
   }
@@ -323,6 +395,10 @@ function sendMovies(movies) {
     if (i) payload += REC;
     payload += P.sanitize(m.title) + FLD + (m.rating || '') + FLD + P.sanitize(m.times);
   }
+  if (state.moviesCacheKey) {
+    cacheSet(state.moviesCacheKey, payload);
+    state.moviesCacheKey = null;
+  }
   state.inFlight = false;
   sendToWatch({ MOVIES: payload });
 }
@@ -334,13 +410,14 @@ function sendMovies(movies) {
 Pebble.addEventListener('ready', function () {
   console.log('Movie Times: PebbleKit JS ready');
   state.settings = loadSettings();
-  fetchTheaters();
+  fetchTheaters(false);
 });
 
 Pebble.addEventListener('appmessage', function (e) {
   var d = e.payload || {};
-  if (d.REQUEST === 'theaters') fetchTheaters();
-  else if (d.REQUEST === 'movies') fetchMovies(d.THEATER_IDX);
+  var force = !!d.FORCE;
+  if (d.REQUEST === 'theaters') fetchTheaters(force);
+  else if (d.REQUEST === 'movies') fetchMovies(d.THEATER_IDX, force);
 });
 
 Pebble.addEventListener('showConfiguration', function () {
@@ -361,5 +438,6 @@ Pebble.addEventListener('webviewclosed', function (e) {
   saveSettings(s);
   state.settings = s;
   ratingCache = {};
-  fetchTheaters();
+  clearCache();
+  fetchTheaters(true);
 });

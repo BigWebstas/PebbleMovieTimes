@@ -148,7 +148,7 @@ static void outbox_failed(DictionaryIterator *iter, AppMessageResult reason, voi
 // Actions
 // ---------------------------------------------------------------------------
 
-void request_theaters(void) {
+void request_theaters(bool force) {
   g_state = STATE_LOADING_THEATERS;
   g_error_msg[0] = '\0';
   theaters_window_reload();
@@ -156,10 +156,11 @@ void request_theaters(void) {
   DictionaryIterator *out;
   if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
   dict_write_cstring(out, MESSAGE_KEY_REQUEST, "theaters");
+  dict_write_int32(out, MESSAGE_KEY_FORCE, force ? 1 : 0);
   app_message_outbox_send();
 }
 
-void request_movies(int theater_idx) {
+void request_movies(int theater_idx, bool force) {
   g_selected_theater = theater_idx;
   g_state = STATE_LOADING_MOVIES;
   g_error_msg[0] = '\0';
@@ -170,6 +171,7 @@ void request_movies(int theater_idx) {
   if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
   dict_write_cstring(out, MESSAGE_KEY_REQUEST, "movies");
   dict_write_int32(out, MESSAGE_KEY_THEATER_IDX, theater_idx);
+  dict_write_int32(out, MESSAGE_KEY_FORCE, force ? 1 : 0);
   app_message_outbox_send();
 }
 
@@ -187,7 +189,7 @@ static void init(void) {
   app_message_open(4096, 256);
 
   theaters_window_push();
-  request_theaters();
+  request_theaters(false);
 }
 
 static void deinit(void) {

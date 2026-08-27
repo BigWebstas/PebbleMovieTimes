@@ -84,10 +84,10 @@ static void draw_row(GContext *gctx, const Layer *cell_layer, MenuIndex *idx, vo
 
 static void select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
   if (!is_list_ready()) {
-    if (g_state == STATE_ERROR) request_theaters();
+    if (g_state == STATE_ERROR) request_theaters(true);
     return;
   }
-  request_movies(idx->row);
+  request_movies(idx->row, false);
   movies_window_push();
 }
 
@@ -110,6 +110,12 @@ static void long_select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
       break;
     }
   }
+}
+
+// Shake the watch to force a fresh fetch (bypasses the phone-side cache).
+static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
+  if (g_state == STATE_LOADING_THEATERS) return;
+  request_theaters(true);
 }
 
 // ---- Window lifecycle ----------------------------------------------------
@@ -142,9 +148,12 @@ static void window_load(Window *window) {
 
   layer_add_child(root, menu_layer_get_layer(s_menu));
   layer_add_child(root, status_bar_layer_get_layer(s_status));
+
+  accel_tap_service_subscribe(accel_tap_handler);
 }
 
 static void window_unload(Window *window) {
+  accel_tap_service_unsubscribe();
   menu_layer_destroy(s_menu);
   status_bar_layer_destroy(s_status);
   s_window = NULL;

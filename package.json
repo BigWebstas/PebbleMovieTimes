@@ -30,7 +30,8 @@
       "THEATERS",
       "MOVIES",
       "ERROR",
-      "STATUS"
+      "STATUS",
+      "FORCE"
     ],
     "resources": {
       "media": []

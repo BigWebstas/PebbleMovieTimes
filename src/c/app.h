@@ -45,8 +45,9 @@ extern AppState g_state;
 extern char     g_error_msg[128];
 
 // --- actions (main.c) ---
-void request_theaters(void);
-void request_movies(int theater_idx);
+// force = bypass the phone-side response cache and hit the APIs fresh.
+void request_theaters(bool force);
+void request_movies(int theater_idx, bool force);
 
 // --- favorites (favorites.c) ---
 void favorites_load(void);              // read persisted favorites into memory

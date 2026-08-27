@@ -74,7 +74,7 @@ static void draw_row(GContext *gctx, const Layer *cell_layer, MenuIndex *idx, vo
 
 static void select_row(MenuLayer *menu, MenuIndex *idx, void *ctx) {
   if (!is_list_ready()) {
-    if (g_state == STATE_ERROR) request_movies(g_selected_theater);
+    if (g_state == STATE_ERROR) request_movies(g_selected_theater, true);
     return;
   }
   showtimes_window_push(idx->row);

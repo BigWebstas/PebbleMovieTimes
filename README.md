@@ -11,8 +11,9 @@ Theaters near you        ->   AMC Empire 25            ->   Dune: Part Two
   4.0★ • 0.6 mi                IMDb 6.4 • 11:15am...        IMAX 7:00pm
 ```
 
-**Select** opens a theater; **long-press Select** pins it as a favorite (★) so
-it stays at the top of the list. Favorites persist on the watch.
+**Select** opens a theater; **long-press Select** pins it as a favorite (★, red
+row) so it stays at the top of the list. Favorites persist on the watch.
+**Shake** the theater screen to refresh past the cache.
 
 ## How it works
 
@@ -27,12 +28,23 @@ it stays at the top of the list. Favorites persist on the watch.
 Data sources:
 
 - **[SerpApi](https://serpapi.com)** – nearby theaters (`google_maps` engine) and
-  Google's showtimes box (`google` engine). Free tier is 100 searches/month;
-  opening the app costs 1 search, opening a theater costs 1 more.
+  Google's showtimes box (`google` engine). Free tier is 100 searches/month.
 - **[BigDataCloud](https://www.bigdatacloud.com)** – free reverse geocoding
   (lat/long → city) for the SerpApi `location` parameter. No key.
 - **[OMDb](https://www.omdbapi.com)** – IMDb ratings. Optional; ratings are just
   omitted without a key.
+
+### Caching
+
+Responses are cached in the phone's `localStorage` to stay off SerpApi's small
+free quota:
+
+- theater list — keyed by location (rounded to ~1 km), 3 h TTL
+- a theater's showtimes — keyed by theater + date, expires end of day
+
+So a normal day of checking times costs ~1–2 searches. **Shake the watch** on
+the theater screen to force a fresh fetch; changing settings also clears the
+cache.
 
 ## Setup
 
