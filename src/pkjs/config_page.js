@@ -2,8 +2,9 @@
  * required. Submits back to the watch app through the pebblejs://close#<json>
  * redirect that the Pebble app intercepts. */
 
-function buildConfigPage(settings) {
+function buildConfigPage(settings, usage) {
   var s = settings || {};
+  var u = usage || {};
   function esc(v) {
     return String(v == null ? '' : v)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -11,6 +12,29 @@ function buildConfigPage(settings) {
   }
   var miChecked = s.units === 'km' ? '' : 'checked';
   var kmChecked = s.units === 'km' ? 'checked' : '';
+
+  // --- usage card -----------------------------------------------------------
+  var usageRows = '';
+  var a = u.account;
+  if (a && a.perMonth != null) {
+    var used = (a.usedThisMonth != null) ? a.usedThisMonth : (a.perMonth - (a.planLeft || 0));
+    var left = (a.totalLeft != null) ? a.totalLeft : Math.max(0, a.perMonth - used);
+    var pct = Math.min(100, Math.round((used / a.perMonth) * 100));
+    usageRows +=
+      '<div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="big">' + used + ' <span class="muted">/ ' + a.perMonth + ' this month</span></div>' +
+      '<div class="hint">' + left + ' searches left on your SerpApi plan.</div>';
+  } else if (s.serpApiKey) {
+    usageRows += '<div class="hint">Couldn\'t reach SerpApi for your plan usage.</div>';
+  } else {
+    usageRows += '<div class="hint">Add a SerpApi key to see plan usage.</div>';
+  }
+  if (u.localCalls != null) {
+    usageRows += '<div class="hint" style="margin-top:8px">This watch app has made <b>' +
+      u.localCalls + '</b> SerpApi call' + (u.localCalls === 1 ? '' : 's') +
+      (u.localSince ? ' since ' + esc(u.localSince) : '') + '. ' +
+      '<a href="#" id="resetCount">Reset</a></div>';
+  }
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
@@ -21,6 +45,10 @@ function buildConfigPage(settings) {
     '.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}' +
     'label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}' +
     '.hint{font-weight:400;color:#888;font-size:12px;margin:2px 0 10px}' +
+    '.muted{color:#999;font-weight:400}' +
+    '.big{font-size:22px;font-weight:700;margin:6px 0 2px}' +
+    '.bar{height:8px;border-radius:4px;background:#eee;overflow:hidden;margin-bottom:8px}' +
+    '.fill{height:100%;background:#e64a19}' +
     'input[type=text]{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccc;' +
     'border-radius:8px;font-size:15px}' +
     '.radios{display:flex;gap:16px;margin-top:4px}.radios label{font-weight:400;display:flex;' +
@@ -30,6 +58,8 @@ function buildConfigPage(settings) {
     'a{color:#e64a19}' +
     '</style></head><body><div class="wrap">' +
     '<h1>Movie Times</h1><p class="sub">Theaters, showtimes and ratings near you.</p>' +
+
+    '<div class="card"><label>SerpApi usage</label>' + usageRows + '</div>' +
 
     '<div class="card">' +
     '<label>SerpApi key <span style="color:#e64a19">*</span></label>' +
@@ -56,11 +86,16 @@ function buildConfigPage(settings) {
 
     '<button id="save">Save</button>' +
     '</div><script>' +
+    'var resetCount=false;' +
+    'var rc=document.getElementById("resetCount");' +
+    'if(rc){rc.addEventListener("click",function(e){e.preventDefault();resetCount=true;' +
+    'rc.textContent="will reset on save";});}' +
     'function getUnits(){var r=document.getElementsByName("units");' +
     'for(var i=0;i<r.length;i++){if(r[i].checked)return r[i].value;}return "mi";}' +
     'document.getElementById("save").addEventListener("click",function(){' +
     'var out={serpApiKey:document.getElementById("serp").value.trim(),' +
-    'omdbApiKey:document.getElementById("omdb").value.trim(),units:getUnits()};' +
+    'omdbApiKey:document.getElementById("omdb").value.trim(),units:getUnits(),' +
+    'resetCounter:resetCount};' +
     'document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(out));});' +
     '</script></body></html>';
 }

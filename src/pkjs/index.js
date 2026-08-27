@@ -155,8 +155,55 @@ function serpUrl(params) {
     }
   }
   console.log('SerpApi request: ' + qs.join('&'));
+  bumpSerpCounter();
   qs.push('api_key=' + encodeURIComponent(state.settings.serpApiKey));
   return 'https://serpapi.com/search.json?' + qs.join('&');
+}
+
+// Local tally of SerpApi searches this watch app has made. The authoritative
+// number is SerpApi's own account endpoint (see fetchSerpAccount); this is just
+// a "what did this app cost me" counter the user can reset.
+function bumpSerpCounter() {
+  try {
+    var n = parseInt(localStorage.getItem('serpCalls') || '0', 10) + 1;
+    localStorage.setItem('serpCalls', String(n));
+    if (!localStorage.getItem('serpCallsSince')) {
+      localStorage.setItem('serpCallsSince', today());
+    }
+  } catch (e) {}
+}
+
+function serpCounterInfo() {
+  try {
+    return {
+      localCalls: parseInt(localStorage.getItem('serpCalls') || '0', 10),
+      localSince: localStorage.getItem('serpCallsSince') || today(),
+    };
+  } catch (e) {
+    return { localCalls: 0, localSince: today() };
+  }
+}
+
+function resetSerpCounter() {
+  try {
+    localStorage.setItem('serpCalls', '0');
+    localStorage.setItem('serpCallsSince', today());
+  } catch (e) {}
+}
+
+// SerpApi's account endpoint - does NOT count against the search quota.
+function fetchSerpAccount(cb) {
+  var key = state.settings && state.settings.serpApiKey;
+  if (!key) { cb(null); return; }
+  httpGetJson('https://serpapi.com/account?api_key=' + encodeURIComponent(key), function (err, data) {
+    if (err || !data) { cb(null); return; }
+    cb({
+      usedThisMonth: data.this_month_usage,
+      totalLeft: data.total_searches_left,
+      perMonth: data.searches_per_month,
+      planLeft: data.plan_searches_left,
+    });
+  }, 8000);
 }
 
 // ---------------------------------------------------------------------------
@@ -522,8 +569,18 @@ Pebble.addEventListener('appmessage', function (e) {
 });
 
 Pebble.addEventListener('showConfiguration', function () {
-  Pebble.openURL('data:text/html;charset=utf-8,' +
-    encodeURIComponent(configPage.buildConfigPage(loadSettings())));
+  state.settings = loadSettings();
+  var opened = false;
+  function open(acct) {
+    if (opened) return;
+    opened = true;
+    var usage = serpCounterInfo();
+    usage.account = acct || null;
+    Pebble.openURL('data:text/html;charset=utf-8,' +
+      encodeURIComponent(configPage.buildConfigPage(state.settings, usage)));
+  }
+  setTimeout(function () { open(null); }, 9000);  // don't let a slow API block the page
+  fetchSerpAccount(open);
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {
@@ -532,13 +589,23 @@ Pebble.addEventListener('webviewclosed', function (e) {
   try { incoming = JSON.parse(decodeURIComponent(e.response)); }
   catch (err) { try { incoming = JSON.parse(e.response); } catch (e2) { return; } }
 
+  if (incoming.resetCounter) resetSerpCounter();
+
   var s = loadSettings();
+  var changed =
+    (incoming.serpApiKey !== undefined && incoming.serpApiKey !== s.serpApiKey) ||
+    (incoming.omdbApiKey !== undefined && incoming.omdbApiKey !== s.omdbApiKey) ||
+    (incoming.units !== undefined && incoming.units !== s.units);
+
   if (incoming.serpApiKey !== undefined) s.serpApiKey = incoming.serpApiKey;
   if (incoming.omdbApiKey !== undefined) s.omdbApiKey = incoming.omdbApiKey;
   if (incoming.units !== undefined) s.units = incoming.units;
   saveSettings(s);
   state.settings = s;
-  ratingCache = {};
-  clearCache();
-  fetchTheaters(true);
+
+  if (changed) {
+    ratingCache = {};
+    clearCache();
+    fetchTheaters(true);
+  }
 });
