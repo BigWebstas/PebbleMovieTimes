@@ -30,20 +30,21 @@ function distanceStr(lat1, lon1, lat2, lon2, units) {
   return mi.toFixed(mi < 10 ? 1 : 0) + ' mi';
 }
 
-var CINEMA_RE = /cinema|cineplex|movie theat|multiplex|megaplex|drive-?in|imax/i;
-var CHAIN_RE = /\b(amc|regal|cinemark|cinepolis|cin[eé]polis|megaplex|marcus|harkins|showcase|odeon|vue|picturehouse|alamo drafthouse|landmark|ipic|studio movie grill|emagine|maya cinemas|bow tie|reading cinemas|cmx|b&b theatres|malco|santikos)\b/i;
-var NOT_CINEMA_RE = /amphitheat|performing arts|concert hall|live music|playhouse|opera|symphony|ballet|stadium|\barena\b|fairground|convention center|community theat|dinner theat/i;
+var CINEMA_RE = /cinema|cineplex|movie theat|cinemas?\b|multiplex|megaplex|drive-?in/i;
+var CHAIN_RE = /\b(amc|regal|cinemark|cinepolis|cin[eé]polis|megaplex|marcus|harkins|showcase|odeon|vue|picturehouse|alamo drafthouse|landmark|ipic|studio movie grill|emagine|maya cinemas|bow tie|reading cinemas|cmx|b&b theatres|malco|santikos|violet crown|look dine-in)\b/i;
+var NOT_CINEMA_RE = /amphitheat|performing arts|concert|live music|playhouse|opera|symphony|orchestra|philharmon|ballet|stadium|\barena\b|fairground|convention center|community theat|dinner theat|repertory|shakespear|hale cent|children'?s theat|black box|little theat|\btheat(re|er) compan|civic (center|theat)/i;
 
 // Does a place look like an actual movie theater (vs. an amphitheater, live
 // venue, playhouse, etc. that Google Maps also returns for "movie theater")?
 function looksLikeCinema(name, type) {
-  name = String(name || '');
+  name = String(name || '').trim();
   type = String(type || '');
+  if (name.length < 4) return false;                  // "IMAX", junk
   if (NOT_CINEMA_RE.test(name) || NOT_CINEMA_RE.test(type)) return false;
-  if (/movie theat|cinema/i.test(type)) return true;
+  if (/movie theater|cinema|multiplex/i.test(type)) return true;  // Google's own category
   if (CINEMA_RE.test(name) || CHAIN_RE.test(name)) return true;
-  if (type) return /theat/i.test(type);  // trust an explicit "…theater" type
-  return true;                            // no type info: don't over-filter
+  if (/theat/i.test(type)) return false;   // "Performing arts theater", "Live theater" -> not a cinema
+  return false;                             // strict: unknown type + generic name -> drop
 }
 
 // data.local_results / data.place_results  ->  [{ name, lat, lon, rating, address, type }]

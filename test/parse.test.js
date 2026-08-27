@@ -39,7 +39,9 @@ t('extractTheaters from local_results', function () {
   assert.strictEqual(list[1].lat, null);
 });
 t('extractTheaters from single place_results', function () {
-  var list = P.extractTheaters({ place_results: { title: 'The Paris Theater', rating: 4.7 } });
+  var list = P.extractTheaters({
+    place_results: { title: 'The Paris Theater', type: 'Movie theater', rating: 4.7 }
+  });
   assert.strictEqual(list.length, 1);
   assert.strictEqual(list[0].rating, '4.7');
 });
@@ -56,6 +58,19 @@ t('extractTheaters filters out non-cinemas', function () {
   var names = list.map(function (t) { return t.name; });
   assert.deepStrictEqual(names,
     ['Megaplex Theatres at Thanksgiving Point', 'Water Gardens Cinema 6']);
+});
+t('extractTheaters drops playhouses, live theaters and junk names', function () {
+  var data = { local_results: [
+    { title: 'The Ruth and Nathan Hale Theater', type: 'Performing arts theater',
+      gps_coordinates: { latitude: 40.4, longitude: -111.8 } },
+    { title: 'Hale Centre Theatre', type: 'Theater company' },
+    { title: 'IMAX', type: '' },
+    { title: 'Sandy Amphitheater', type: 'Amphitheater' },
+    { title: 'AMC Classic Orem 8', type: 'Movie theater',
+      gps_coordinates: { latitude: 40.3, longitude: -111.7 } },
+  ] };
+  var names = P.extractTheaters(data).map(function (t) { return t.name; });
+  assert.deepStrictEqual(names, ['AMC Classic Orem 8']);
 });
 
 // --- showing flattening ---------------------------------------------------

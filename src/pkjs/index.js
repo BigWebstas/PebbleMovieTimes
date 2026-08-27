@@ -56,7 +56,7 @@ function saveSettings(s) {
 // ---------------------------------------------------------------------------
 
 // Bump when the cached payload shape or the parsing changes, to auto-invalidate.
-var CACHE_PREFIX = 'cache:v2:';
+var CACHE_PREFIX = 'cache:v3:';
 
 var THEATERS_TTL_MS = 24 * 60 * 60 * 1000;  // 24h (also keyed by ~1km location)
 var MOVIES_TTL_MS = 24 * 60 * 60 * 1000;    // 24h (also keyed by date, so expires at midnight)
@@ -263,7 +263,13 @@ function fetchTheaters(force) {
       });
 
       function handleTheaters(data) {
+        var cand = data.local_results || (data.place_results ? [data.place_results] : []);
+        console.log('theater candidates: ' + cand.map(function (r) {
+          return (r.title || '?') + ' [' + (r.type || r.types || '') + ']';
+        }).join(' | '));
+
         var list = P.extractTheaters(data);
+        console.log('kept as cinemas: ' + list.map(function (t) { return t.name; }).join(', '));
         for (var i = 0; i < list.length; i++) {
           list[i]._km = (list[i].lat != null && list[i].lon != null)
             ? P.haversineKm(coords.lat, coords.lon, list[i].lat, list[i].lon)
@@ -332,6 +338,13 @@ function loadShowtimes(theater, force, done) {
       }
       console.log('showtimes attempt ' + i + ' keys: ' + Object.keys(data).join(','));
       for (var kk in data) { if (data.hasOwnProperty(kk)) seenKeys[kk] = 1; }
+
+      var st = data.showtimes ||
+        (data.knowledge_graph && data.knowledge_graph.showtimes) ||
+        (data.answer_box && data.answer_box.showtimes);
+      if (st) {
+        try { console.log('showtimes raw: ' + JSON.stringify(st).slice(0, 700)); } catch (e) {}
+      }
 
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
       if (!movies.length) { run(i + 1); return; }
