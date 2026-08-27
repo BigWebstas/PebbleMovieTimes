@@ -4,3 +4,7 @@ build/
 node_modules/
 *.pbw
 .pebble-cache/
+
+# stray screenshots
+*.png
+!resources/**/*.png
