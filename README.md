@@ -14,17 +14,7 @@ you, then shows each theater's movies, today's showtimes, and IMDb ratings.
 row) so it stays at the top of the list. Favorites persist on the watch.
 **Shake** the theater screen to refresh past the cache.
 
-## How it works
-
-| Piece | Role |
-|-------|------|
-| `src/c/*` | The watchapp: three menu screens (theaters → movies → showtimes). |
-| `src/c/favorites.c` | Pin/unpin theaters; persisted with `persist_*`. |
-| `src/pkjs/index.js` | Runs on the phone. Gets GPS, calls the APIs, streams results to the watch. |
-| `src/pkjs/parse.js` | Pure response-parsing helpers (unit tested). |
-| `src/pkjs/config_page.js` | The settings screen (self-contained, no hosting needed). |
-
-Data sources:
+## Data sources
 
 - **[SerpApi](https://serpapi.com)** – nearby theaters (`google_maps` engine) and
   Google's showtimes box (`google` engine). Free tier is 100 searches/month.
@@ -65,43 +55,6 @@ local tally of searches this app has made, with a Reset link.
 Cache duration (6 / 24 / 48 h) is a dropdown on that page — longer means fewer
 SerpApi searches for staler showtimes.
 
-## Setup
-
-1. Install the Pebble SDK (via [pebble-tool](https://developer.rebble.io/guides/tools-and-resources/pebble-tool/)):
-
-   ```sh
-   uv tool install --python 3.13 pebble-tool
-   pebble sdk install latest
-   ```
-
-2. Build:
-
-   ```sh
-   pebble build
-   ```
-
-3. Run in the emulator or install to a watch:
-
-   ```sh
-   pebble install --emulator basalt
-   # or, with the phone app + developer connection:
-   pebble install --phone <PHONE_IP>
-   ```
-
-4. Open the app's **Settings** (long-press it in the Pebble phone app, or the
-   gear in the appstore list) and paste your SerpApi key. Optionally add an
-   OMDb key and pick miles/kilometers.
-
-## Tests
-
-```sh
-node test/parse.test.js
-```
-
-Covers distance formatting, theater extraction, showtime flattening (time
-arrays, comma strings, IMAX/Dolby labels), the "today vs first day" pick, and
-reverse-geocode string building.
-
 ## Notes / limitations
 
 - Google only exposes a showtimes box for locations it has cinema data for
@@ -110,5 +63,7 @@ reverse-geocode string building.
   shows every time.
 - Watch AppMessage inbox is 4 KB, so the movie list is capped at 14 titles and
   each showtime string at ~150 chars.
-- SerpApi's free tier is small. If you open the app a lot, consider caching or
-  upgrading.
+- SerpApi's free tier is 100 searches/month and prefetch spends ~12 per
+  refresh; a paid plan or a longer cache window helps.
+
+Building from source and the internals are documented in `CLAUDE.md`.
