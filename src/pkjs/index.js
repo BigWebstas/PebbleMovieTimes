@@ -82,12 +82,20 @@ function httpGetJson(url, cb) {
   req.open('GET', url, true);
   req.timeout = 20000;
   req.onload = function () {
+    var body = null;
+    try { body = JSON.parse(req.responseText); } catch (e) {}
+
     if (req.status >= 200 && req.status < 300) {
-      try { cb(null, JSON.parse(req.responseText)); }
-      catch (e) { cb('Unexpected response'); }
+      if (body) cb(null, body);
+      else cb('Unexpected response');
+    } else if (body && body.error) {
+      // SerpApi / OMDb return a helpful message in the body on 4xx.
+      console.log('HTTP ' + req.status + ': ' + body.error);
+      cb(body.error);
     } else if (req.status === 401) {
       cb('API key rejected');
     } else {
+      console.log('HTTP ' + req.status + ' for ' + url.replace(/api_key=[^&]*/, 'api_key=***'));
       cb('Server error ' + req.status);
     }
   };
@@ -103,6 +111,7 @@ function serpUrl(params) {
       qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
     }
   }
+  console.log('SerpApi request: ' + qs.join('&'));
   qs.push('api_key=' + encodeURIComponent(state.settings.serpApiKey));
   return 'https://serpapi.com/search.json?' + qs.join('&');
 }
@@ -152,7 +161,7 @@ function fetchTheaters() {
     reverseGeocode(coords.lat, coords.lon, function (city) {
       state.city = city;
 
-      var url = serpUrl({
+      var mapsUrl = serpUrl({
         engine: 'google_maps',
         type: 'search',
         q: 'movie theater',
@@ -160,10 +169,29 @@ function fetchTheaters() {
         hl: 'en',
       });
 
-      httpGetJson(url, function (err2, data) {
+      httpGetJson(mapsUrl, function (err2, data) {
+        if ((err2 || (data && data.error)) && state.city) {
+          // Fall back to the google_local engine keyed off the city name.
+          console.log('google_maps failed, trying google_local');
+          var localUrl = serpUrl({
+            engine: 'google_local',
+            q: 'movie theater',
+            location: state.city,
+            hl: 'en',
+          });
+          httpGetJson(localUrl, function (e3, d3) {
+            if (e3) { sendError(e3); return; }
+            if (d3.error) { sendError(d3.error); return; }
+            handleTheaters(d3);
+          });
+          return;
+        }
         if (err2) { sendError(err2); return; }
         if (data.error) { sendError(data.error); return; }
+        handleTheaters(data);
+      });
 
+      function handleTheaters(data) {
         var list = P.extractTheaters(data);
         for (var i = 0; i < list.length; i++) {
           list[i]._km = (list[i].lat != null && list[i].lon != null)
@@ -189,7 +217,7 @@ function fetchTheaters() {
 
         state.inFlight = false;
         sendToWatch({ THEATERS: payload });
-      });
+      }
     });
   });
 }
@@ -211,25 +239,42 @@ function fetchMovies(idx) {
   sendStatus('Fetching showtimes...');
 
   var cityShort = state.city ? state.city.split(',')[0] : '';
-  var url = serpUrl({
-    engine: 'google',
-    q: theater.name + (cityShort ? ' ' + cityShort : ''),
-    location: state.city || null,
-    hl: 'en',
-    gl: 'us',
-  });
+  var q = theater.name + (cityShort ? ' ' + cityShort : '') + ' showtimes';
 
-  httpGetJson(url, function (err, data) {
-    if (err) { sendError(err); return; }
-    if (data.error) { sendError(data.error); return; }
+  // SerpApi's `location` must match a place in their locations DB; a raw
+  // reverse-geocoded string sometimes doesn't, which returns HTTP 400. So try
+  // with `location` first, then fall back to a location-free query.
+  function run(withLocation) {
+    var url = serpUrl({
+      engine: 'google',
+      q: q,
+      location: withLocation ? (state.city || null) : null,
+      hl: 'en',
+      gl: 'us',
+    });
 
-    var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
-    if (!movies.length) {
-      sendError('No showtimes listed for ' + theater.name + ' today.');
-      return;
-    }
-    attachRatingsThenSend(movies);
-  });
+    httpGetJson(url, function (err, data) {
+      if (err) {
+        if (withLocation) { console.log('showtimes retry without location'); run(false); return; }
+        sendError(err);
+        return;
+      }
+      if (data.error) {
+        if (withLocation) { console.log('showtimes retry without location'); run(false); return; }
+        sendError(data.error);
+        return;
+      }
+
+      var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
+      if (!movies.length) {
+        sendError('No showtimes listed for ' + theater.name + ' today.');
+        return;
+      }
+      attachRatingsThenSend(movies);
+    });
+  }
+
+  run(!!state.city);
 }
 
 // ---------------------------------------------------------------------------
