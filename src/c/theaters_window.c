@@ -55,7 +55,7 @@ static void draw_row(GContext *gctx, const Layer *cell_layer, MenuIndex *idx, vo
   // painted its highlight colour, so only override for unselected favorites.
   if (t->favorite && !selected) {
 #if defined(PBL_COLOR)
-    graphics_context_set_fill_color(gctx, GColorPastelYellow);
+    graphics_context_set_fill_color(gctx, GColorMelon);
     graphics_fill_rect(gctx, layer_get_bounds(cell_layer), 0, GCornerNone);
     graphics_context_set_text_color(gctx, GColorBlack);
 #endif
