@@ -55,6 +55,9 @@ function saveSettings(s) {
 // Response cache (localStorage). Keeps SerpApi calls off the 100/month quota.
 // ---------------------------------------------------------------------------
 
+// Bump when the cached payload shape or the parsing changes, to auto-invalidate.
+var CACHE_PREFIX = 'cache:v2:';
+
 var THEATERS_TTL_MS = 3 * 60 * 60 * 1000;  // 3 hours
 var MOVIES_TTL_MS = 6 * 60 * 60 * 1000;    // 6 hours (and keyed by date)
 
@@ -65,7 +68,7 @@ function today() {
 
 function cacheGet(key, ttlMs) {
   try {
-    var raw = localStorage.getItem('cache:' + key);
+    var raw = localStorage.getItem(CACHE_PREFIX + key);
     if (!raw) return null;
     var o = JSON.parse(raw);
     if (!o || (Date.now() - o.t) > ttlMs) return null;
@@ -75,7 +78,7 @@ function cacheGet(key, ttlMs) {
 
 function cacheSet(key, value) {
   try {
-    localStorage.setItem('cache:' + key, JSON.stringify({ t: Date.now(), v: value }));
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ t: Date.now(), v: value }));
   } catch (e) { /* quota / private mode - just skip caching */ }
 }
 
@@ -310,12 +313,13 @@ function fetchMovies(idx, force) {
 
   var cityShort = state.city ? state.city.split(',')[0] : '';
 
-  // Google only renders the theater showtimes box for some query shapes, and
-  // SerpApi's `location` param 400s on strings it doesn't recognise.
+  // Google only renders the theater showtimes box for some query shapes. The
+  // `location` param is deliberately omitted - SerpApi 400s on strings it can't
+  // resolve, and putting the city in `q` works just as well.
   var attempts = [
-    { q: theater.name, location: null },
-    { q: theater.name + (cityShort ? ' ' + cityShort : ''), location: state.city || null },
-    { q: theater.name + ' showtimes', location: null },
+    theater.name + (cityShort ? ' ' + cityShort : '') + ' showtimes',
+    theater.name + (cityShort ? ' ' + cityShort : ''),
+    theater.name + ' showtimes',
   ];
   var seenKeys = {};
 
@@ -325,8 +329,7 @@ function fetchMovies(idx, force) {
       sendError('No showtimes for ' + theater.name + '. Google returned: ' + diag);
       return;
     }
-    var a = attempts[i];
-    var url = serpUrl({ engine: 'google', q: a.q, location: a.location, hl: 'en', gl: 'us' });
+    var url = serpUrl({ engine: 'google', q: attempts[i], hl: 'en', gl: 'us' });
 
     httpGetJson(url, function (err, data) {
       if (err || (data && data.error)) {
@@ -334,8 +337,7 @@ function fetchMovies(idx, force) {
         run(i + 1);
         return;
       }
-      var k = Object.keys(data).join(',');
-      console.log('showtimes attempt ' + i + ' keys: ' + k);
+      console.log('showtimes attempt ' + i + ' keys: ' + Object.keys(data).join(','));
       for (var kk in data) { if (data.hasOwnProperty(kk)) seenKeys[kk] = 1; }
 
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);

@@ -30,7 +30,23 @@ function distanceStr(lat1, lon1, lat2, lon2, units) {
   return mi.toFixed(mi < 10 ? 1 : 0) + ' mi';
 }
 
-// data.local_results / data.place_results  ->  [{ name, lat, lon, rating, address }]
+var CINEMA_RE = /cinema|cineplex|movie theat|multiplex|megaplex|drive-?in|imax/i;
+var CHAIN_RE = /\b(amc|regal|cinemark|cinepolis|cin[eé]polis|megaplex|marcus|harkins|showcase|odeon|vue|picturehouse|alamo drafthouse|landmark|ipic|studio movie grill|emagine|maya cinemas|bow tie|reading cinemas|cmx|b&b theatres|malco|santikos)\b/i;
+var NOT_CINEMA_RE = /amphitheat|performing arts|concert hall|live music|playhouse|opera|symphony|ballet|stadium|\barena\b|fairground|convention center|community theat|dinner theat/i;
+
+// Does a place look like an actual movie theater (vs. an amphitheater, live
+// venue, playhouse, etc. that Google Maps also returns for "movie theater")?
+function looksLikeCinema(name, type) {
+  name = String(name || '');
+  type = String(type || '');
+  if (NOT_CINEMA_RE.test(name) || NOT_CINEMA_RE.test(type)) return false;
+  if (/movie theat|cinema/i.test(type)) return true;
+  if (CINEMA_RE.test(name) || CHAIN_RE.test(name)) return true;
+  if (type) return /theat/i.test(type);  // trust an explicit "…theater" type
+  return true;                            // no type info: don't over-filter
+}
+
+// data.local_results / data.place_results  ->  [{ name, lat, lon, rating, address, type }]
 function extractTheaters(data) {
   var raw = [];
   if (data && data.local_results && data.local_results.length) raw = data.local_results;
@@ -40,6 +56,8 @@ function extractTheaters(data) {
   for (var i = 0; i < raw.length; i++) {
     var r = raw[i];
     if (!r || !r.title) continue;
+    var type = r.type || (r.types && r.types.join(' ')) || '';
+    if (!looksLikeCinema(r.title, type)) continue;
     var g = r.gps_coordinates || {};
     list.push({
       name: r.title,
@@ -47,6 +65,7 @@ function extractTheaters(data) {
       lon: (g.longitude != null) ? g.longitude : null,
       rating: (r.rating != null) ? String(r.rating) : '',
       address: r.address || '',
+      type: type,
     });
   }
   return list;
@@ -77,7 +96,8 @@ function flattenShowing(showing) {
 function extractMovies(data) {
   var out = [];
   var blocks = (data && data.showtimes) ||
-    (data && data.answer_box && data.answer_box.showtimes) || null;
+    (data && data.answer_box && data.answer_box.showtimes) ||
+    (data && data.knowledge_graph && data.knowledge_graph.showtimes) || null;
   if (!blocks || !blocks.length) return out;
 
   var block = null;
@@ -110,7 +130,9 @@ function locationString(data) {
   }
   if (city) parts.push(city);
   if (data.principalSubdivision) parts.push(data.principalSubdivision);
-  if (data.countryName) parts.push(data.countryName);
+  var country = data.countryName;
+  if (country === 'United States of America' || country === 'USA') country = 'United States';
+  if (country) parts.push(country);
   return parts.length ? parts.join(', ') : null;
 }
 

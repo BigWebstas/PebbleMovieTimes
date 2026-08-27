@@ -43,6 +43,20 @@ t('extractTheaters from single place_results', function () {
   assert.strictEqual(list.length, 1);
   assert.strictEqual(list[0].rating, '4.7');
 });
+t('extractTheaters filters out non-cinemas', function () {
+  var data = { local_results: [
+    { title: 'Silver Lake Amphitheater', type: 'Amphitheater',
+      gps_coordinates: { latitude: 40.4, longitude: -111.8 } },
+    { title: 'Megaplex Theatres at Thanksgiving Point', type: 'Movie theater',
+      gps_coordinates: { latitude: 40.42, longitude: -111.89 } },
+    { title: 'Scera Center for the Arts', type: 'Performing arts theater' },
+    { title: 'Water Gardens Cinema 6', type: '' },  // no type, name carries it
+  ] };
+  var list = P.extractTheaters(data);
+  var names = list.map(function (t) { return t.name; });
+  assert.deepStrictEqual(names,
+    ['Megaplex Theatres at Thanksgiving Point', 'Water Gardens Cinema 6']);
+});
 
 // --- showing flattening ---------------------------------------------------
 t('flattenShowing with time arrays and formats', function () {
@@ -109,6 +123,18 @@ t('locationString from BigDataCloud shape', function () {
   var s = P.locationString({ city: 'Austin', principalSubdivision: 'Texas', countryName: 'United States' });
   assert.strictEqual(s, 'Austin, Texas, United States');
   assert.strictEqual(P.locationString({}), null);
+});
+t('locationString normalizes country name', function () {
+  var s = P.locationString({ city: 'Lehi', principalSubdivision: 'Utah',
+    countryName: 'United States of America' });
+  assert.strictEqual(s, 'Lehi, Utah, United States');
+});
+t('extractMovies reads knowledge_graph.showtimes', function () {
+  var m = P.extractMovies({ knowledge_graph: { showtimes: [
+    { day: 'Today', movies: [{ name: 'Inside Out 2', showing: [{ time: ['4:00pm'] }] }] }
+  ] } });
+  assert.strictEqual(m.length, 1);
+  assert.strictEqual(m[0].title, 'Inside Out 2');
 });
 
 console.log('\n' + pass + ' passed');
