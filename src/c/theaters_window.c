@@ -49,6 +49,17 @@ static void draw_row(GContext *gctx, const Layer *cell_layer, MenuIndex *idx, vo
   }
 
   Theater *t = &g_theaters[idx->row];
+  bool selected = menu_cell_layer_is_highlighted(cell_layer);
+
+  // Tint pinned rows. When the row is selected the MenuLayer has already
+  // painted its highlight colour, so only override for unselected favorites.
+  if (t->favorite && !selected) {
+#if defined(PBL_COLOR)
+    graphics_context_set_fill_color(gctx, GColorPastelYellow);
+    graphics_fill_rect(gctx, layer_get_bounds(cell_layer), 0, GCornerNone);
+    graphics_context_set_text_color(gctx, GColorBlack);
+#endif
+  }
 
   char title[NAME_LEN + 4];
   if (t->favorite) {
