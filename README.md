@@ -3,13 +3,12 @@
 A Pebble watchapp that uses your phone's location to list movie theaters near
 you, then shows each theater's movies, today's showtimes, and IMDb ratings.
 
-```
-Theaters near you        ->   AMC Empire 25            ->   Dune: Part Two
-★ AMC Empire 25               Dune: Part Two               IMDb 8.5
-  4.1★ • 0.3 mi                IMDb 8.5 • 12:00pm...        12:00pm
-  Regal Union Square          Kung Fu Panda 4              3:30pm
-  4.0★ • 0.6 mi                IMDb 6.4 • 11:15am...        IMAX 7:00pm
-```
+<p>
+  <img src="docs/screenshots/1-theaters.png" width="200" alt="Nearby theaters, a favorite pinned to the top">
+  <img src="docs/screenshots/2-movies.png" width="200" alt="Movies playing at a theater">
+  <img src="docs/screenshots/3-showtimes.png" width="200" alt="A movie's showtimes">
+  <img src="docs/screenshots/0-splash.png" width="200" alt="First-run screen">
+</p>
 
 **Select** opens a theater; **long-press Select** pins it as a favorite (★, red
 row) so it stays at the top of the list. Favorites persist on the watch.
@@ -60,6 +59,11 @@ they aren't re-queried all day.
 The settings page shows a **SerpApi usage** card: your real plan usage pulled
 from SerpApi's `/account` endpoint (free, doesn't touch the quota), plus a
 local tally of searches this app has made, with a Reset link.
+
+<img src="docs/screenshots/4-settings.png" width="320" alt="Settings page: usage card, API keys, units, cache duration">
+
+Cache duration (6 / 24 / 48 h) is a dropdown on that page — longer means fewer
+SerpApi searches for staler showtimes.
 
 ## Setup
 
