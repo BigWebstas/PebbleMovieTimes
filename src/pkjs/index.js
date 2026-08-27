@@ -27,8 +27,8 @@ var state = {
   city: null,       // "City, Region, Country" for the SerpApi location param
   coords: null,     // { lat, lon }
   theaters: [],      // from P.extractTheaters, sorted by distance
-  inFlight: false,
-  moviesCacheKey: null,  // set while a showtimes fetch is running, so sendMovies can cache it
+  inFlight: false,   // a user-driven fetch is running
+  prefetching: false, // the background showtimes prefetcher is running
 };
 
 // ---------------------------------------------------------------------------
@@ -58,8 +58,8 @@ function saveSettings(s) {
 // Bump when the cached payload shape or the parsing changes, to auto-invalidate.
 var CACHE_PREFIX = 'cache:v2:';
 
-var THEATERS_TTL_MS = 3 * 60 * 60 * 1000;  // 3 hours
-var MOVIES_TTL_MS = 6 * 60 * 60 * 1000;    // 6 hours (and keyed by date)
+var THEATERS_TTL_MS = 24 * 60 * 60 * 1000;  // 24h (also keyed by ~1km location)
+var MOVIES_TTL_MS = 24 * 60 * 60 * 1000;    // 24h (also keyed by date, so expires at midnight)
 
 function today() {
   var d = new Date();
@@ -222,6 +222,7 @@ function fetchTheaters(force) {
         state.theaters = hit.theaters;
         state.inFlight = false;
         sendToWatch({ THEATERS: buildTheaterPayload(hit.theaters, coords) });
+        prefetchShowtimes();
         return;
       }
     }
@@ -279,6 +280,7 @@ function fetchTheaters(force) {
 
         state.inFlight = false;
         sendToWatch({ THEATERS: buildTheaterPayload(list, coords) });
+        prefetchShowtimes();
       }
     });
   });
@@ -288,28 +290,19 @@ function fetchTheaters(force) {
 // Step 2: showtimes for one theater
 // ---------------------------------------------------------------------------
 
-function fetchMovies(idx, force) {
-  if (state.inFlight) return;
-  idx = idx | 0;
-  var theater = state.theaters[idx];
-  if (!theater) { sendError('Choose a theater again.'); return; }
+function moviesCacheKey(theaterName) {
+  return 'movies:' + theaterName + ':' + today();
+}
 
-  state.settings = loadSettings();
-  if (!state.settings.serpApiKey) { sendError('Add your SerpApi key in settings.'); return; }
-
-  var cacheKey = 'movies:' + theater.name + ':' + today();
+// Fetch + parse + rate + cache one theater's showtimes. Does NOT touch
+// state.inFlight or message the watch - the caller decides what to do with the
+// result. done(err, payloadString).
+function loadShowtimes(theater, force, done) {
+  var cacheKey = moviesCacheKey(theater.name);
   if (!force) {
     var hit = cacheGet(cacheKey, MOVIES_TTL_MS);
-    if (hit != null) {
-      console.log('showtimes: cache hit for ' + theater.name);
-      sendToWatch({ MOVIES: hit });
-      return;
-    }
+    if (hit != null) { done(null, hit); return; }
   }
-
-  state.inFlight = true;
-  state.moviesCacheKey = cacheKey;
-  sendStatus('Fetching showtimes...');
 
   var cityShort = state.city ? state.city.split(',')[0] : '';
 
@@ -326,7 +319,7 @@ function fetchMovies(idx, force) {
   function run(i) {
     if (i >= attempts.length) {
       var diag = Object.keys(seenKeys).join(',') || 'nothing';
-      sendError('No showtimes for ' + theater.name + '. Google returned: ' + diag);
+      done('No showtimes for ' + theater.name + '. Google returned: ' + diag);
       return;
     }
     var url = serpUrl({ engine: 'google', q: attempts[i], hl: 'en', gl: 'us' });
@@ -342,29 +335,98 @@ function fetchMovies(idx, force) {
 
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
       if (!movies.length) { run(i + 1); return; }
-      attachRatingsThenSend(movies);
+
+      attachRatings(movies, function () {
+        var payload = buildMoviePayload(movies);
+        cacheSet(cacheKey, payload);
+        done(null, payload);
+      });
     });
   }
 
   run(0);
 }
 
+function fetchMovies(idx, force) {
+  idx = idx | 0;
+  var theater = state.theaters[idx];
+  if (!theater) { sendError('Choose a theater again.'); return; }
+
+  state.settings = loadSettings();
+  if (!state.settings.serpApiKey) { sendError('Add your SerpApi key in settings.'); return; }
+
+  // Fast path: already cached (possibly by the prefetcher).
+  if (!force) {
+    var hit = cacheGet(moviesCacheKey(theater.name), MOVIES_TTL_MS);
+    if (hit != null) {
+      console.log('showtimes: cache hit for ' + theater.name);
+      sendToWatch({ MOVIES: hit });
+      return;
+    }
+  }
+
+  if (state.inFlight) return;
+  state.inFlight = true;
+  sendStatus('Fetching showtimes...');
+
+  loadShowtimes(theater, force, function (err, payload) {
+    state.inFlight = false;
+    if (err) { sendError(err); return; }
+    sendToWatch({ MOVIES: payload });
+    prefetchShowtimes();  // warm the rest of the list while we're here
+  });
+}
+
 // ---------------------------------------------------------------------------
-// Step 3: IMDb ratings (OMDb, optional) then send
+// Prefetch: after the theater list is shown, quietly warm every theater's
+// showtimes into the cache so opening one is instant. One SerpApi search per
+// uncached theater; requests are spaced out and yield to user-driven fetches.
+// ---------------------------------------------------------------------------
+
+function prefetchShowtimes() {
+  if (state.prefetching) return;
+  if (!state.settings || !state.settings.serpApiKey) return;
+
+  var list = state.theaters.slice();
+  var i = 0;
+  state.prefetching = true;
+
+  function next() {
+    if (i >= list.length) {
+      state.prefetching = false;
+      console.log('prefetch: done');
+      return;
+    }
+    if (state.inFlight) { setTimeout(next, 2500); return; }  // let the user go first
+
+    var t = list[i++];
+    if (cacheGet(moviesCacheKey(t.name), MOVIES_TTL_MS) != null) { next(); return; }
+
+    console.log('prefetch: ' + t.name);
+    loadShowtimes(t, false, function () {
+      setTimeout(next, 1500);
+    });
+  }
+
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// Step 3: IMDb ratings (OMDb, optional)
 // ---------------------------------------------------------------------------
 
 var ratingCache = {};
 
-function attachRatingsThenSend(movies) {
+function attachRatings(movies, done) {
   var key = state.settings.omdbApiKey;
-  if (!key) { sendMovies(movies); return; }
+  if (!key) { done(); return; }
 
   var pending = 0;
-  var sent = false;
+  var finished = false;
   function finish() {
-    if (sent) return;
-    sent = true;
-    sendMovies(movies);
+    if (finished) return;
+    finished = true;
+    done();
   }
 
   for (var i = 0; i < movies.length; i++) {
@@ -387,22 +449,17 @@ function attachRatingsThenSend(movies) {
   }
 
   if (pending === 0) finish();
-  setTimeout(finish, OMDB_TIMEOUT_MS);  // never strand the watch on "Fetching..."
+  setTimeout(finish, OMDB_TIMEOUT_MS);  // never strand a fetch on a slow OMDb call
 }
 
-function sendMovies(movies) {
+function buildMoviePayload(movies) {
   var payload = '';
   for (var i = 0; i < movies.length; i++) {
     var m = movies[i];
     if (i) payload += REC;
     payload += P.sanitize(m.title) + FLD + (m.rating || '') + FLD + P.sanitize(m.times);
   }
-  if (state.moviesCacheKey) {
-    cacheSet(state.moviesCacheKey, payload);
-    state.moviesCacheKey = null;
-  }
-  state.inFlight = false;
-  sendToWatch({ MOVIES: payload });
+  return payload;
 }
 
 // ---------------------------------------------------------------------------

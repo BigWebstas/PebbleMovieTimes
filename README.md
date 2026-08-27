@@ -36,15 +36,21 @@ Data sources:
 
 ### Caching
 
-Responses are cached in the phone's `localStorage` to stay off SerpApi's small
-free quota:
+Responses are cached in the phone's `localStorage`:
 
-- theater list — keyed by location (rounded to ~1 km), 3 h TTL
-- a theater's showtimes — keyed by theater + date, expires end of day
+- theater list — keyed by location (rounded to ~1 km), 24 h TTL
+- a theater's showtimes — keyed by theater + date, 24 h TTL (so it expires at
+  midnight anyway)
 
-So a normal day of checking times costs ~1–2 searches. **Shake the watch** on
-the theater screen to force a fresh fetch; changing settings also clears the
-cache.
+**Prefetch:** as soon as the theater list is shown, the phone quietly fetches
+showtimes for *every* theater on the list into the cache (one SerpApi search
+each, spaced out, yielding to anything you tap). After that, opening any
+theater is instant for the rest of the day. This trades API calls for
+speed — with SerpApi's 100/month free tier you'll want a paid plan; drop
+`prefetchShowtimes()` from `fetchTheaters` to disable it.
+
+**Shake the watch** on the theater screen to force a fresh fetch; changing
+settings also clears the cache.
 
 ## Setup
 
