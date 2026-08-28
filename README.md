@@ -14,6 +14,11 @@ you, then shows each theater's movies, today's showtimes, and IMDb ratings.
 row) so it stays at the top of the list. Favorites persist on the watch.
 **Shake** the theater screen to refresh past the cache.
 
+On the Pebble Time 2 (and other touch watches) the app opts into system touch
+navigation, so you can swipe to scroll the lists, tap to open a row, and swipe
+right to go back. Enable "Touch Navigation" in the watch's system settings for
+it to take effect; the physical buttons keep working either way.
+
 ## Data sources
 
 - **[SerpApi](https://serpapi.com)** – nearby theaters (`google_maps` engine) and
