@@ -1,5 +1,6 @@
 build/
 .idea/
+CLAUDE.md
 .lock-waf*
 node_modules/
 *.pbw
