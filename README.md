@@ -10,6 +10,12 @@ you, then shows each theater's movies, today's showtimes, and IMDb ratings.
   <img src="docs/screenshots/0-splash.png" width="200" alt="First-run screen">
 </p>
 
+<p>
+  <img src="docs/screenshots/5-browse-theaters.gif" width="200" alt="Scrolling the nearby-theaters list">
+  <img src="docs/screenshots/6-open-showtimes.gif" width="200" alt="Opening a theater, a movie, then its showtimes">
+  <img src="docs/screenshots/7-pin-favorite.gif" width="200" alt="Long-pressing to pin a theater as a favorite">
+</p>
+
 **Select** opens a theater; **long-press Select** pins it as a favorite (★, red
 row) so it stays at the top of the list. Favorites persist on the watch.
 **Shake** the theater screen to refresh past the cache.
