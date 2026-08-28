@@ -222,6 +222,13 @@ static void init(void) {
   // Generous inbox: a full theater / movie list arrives as one string.
   app_message_open(4096, 256);
 
+  // Opt into the system touch-navigation bridge on touch watches (PT2 / gabbro):
+  // swipes and taps on the MenuLayer / ScrollLayer screens map to button presses.
+  // Compiled out on the button-only platforms, whose libs lack the symbol.
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  app_touch_navigation_enable(true);
+#endif
+
   theaters_window_push();
   request_theaters(false);
 }
