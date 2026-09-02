@@ -38,7 +38,7 @@ Set these on the settings page (Pebble app → Movie Times):
 Responses are cached in the phone's `localStorage` (6 / 24 / 48 h, set on the
 settings page). Opening the theater list quietly prefetches every theater's
 showtimes so the rest of the day is instant. The settings page shows your real
-SerpApi quota plus a local tally.
+SerpApi quota plus a local tally, and follows your phone's light/dark theme.
 
 ## Limitations
 
