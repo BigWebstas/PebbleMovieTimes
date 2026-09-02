@@ -43,33 +43,40 @@ function buildConfigPage(settings, usage) {
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta name="color-scheme" content="light dark">' +
     '<title>Movie Times Settings</title><style>' +
-    'body{font-family:-apple-system,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f2f2f2;color:#222}' +
+    ':root{--bg:#f2f2f2;--fg:#222;--sub:#666;--card:#fff;--card-shadow:rgba(0,0,0,.08);' +
+    '--hint:#888;--muted:#999;--bar:#eee;--field-bg:#fff;--field-border:#ccc;' +
+    '--accent:#e64a19;--on-accent:#fff}' +
+    '@media (prefers-color-scheme:dark){:root{--bg:#1c1c1e;--fg:#e6e6e9;--sub:#9a9aa0;' +
+    '--card:#2c2c2e;--card-shadow:rgba(0,0,0,.4);--hint:#8e8e93;--muted:#7a7a7f;--bar:#3a3a3c;' +
+    '--field-bg:#1c1c1e;--field-border:#48484a;--accent:#ff6b3d;--on-accent:#1c1c1e}}' +
+    'body{font-family:-apple-system,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--fg)}' +
     '.wrap{max-width:520px;margin:0 auto;padding:20px}' +
-    'h1{font-size:20px;margin:8px 0 4px}p.sub{margin:0 0 20px;color:#666;font-size:13px}' +
-    '.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}' +
+    'h1{font-size:20px;margin:8px 0 4px}p.sub{margin:0 0 20px;color:var(--sub);font-size:13px}' +
+    '.card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px var(--card-shadow)}' +
     'label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}' +
-    '.hint{font-weight:400;color:#888;font-size:12px;margin:2px 0 10px}' +
-    '.muted{color:#999;font-weight:400}' +
+    '.hint{font-weight:400;color:var(--hint);font-size:12px;margin:2px 0 10px}' +
+    '.muted{color:var(--muted);font-weight:400}' +
     '.big{font-size:22px;font-weight:700;margin:6px 0 2px}' +
-    '.bar{height:8px;border-radius:4px;background:#eee;overflow:hidden;margin-bottom:8px}' +
-    '.fill{height:100%;background:#e64a19}' +
-    'input[type=text]{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccc;' +
-    'border-radius:8px;font-size:15px}' +
+    '.bar{height:8px;border-radius:4px;background:var(--bar);overflow:hidden;margin-bottom:8px}' +
+    '.fill{height:100%;background:var(--accent)}' +
+    'input[type=text]{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--field-border);' +
+    'border-radius:8px;font-size:15px;background:var(--field-bg);color:var(--fg)}' +
     '.radios{display:flex;gap:16px;margin-top:4px}.radios label{font-weight:400;display:flex;' +
     'align-items:center;gap:6px;margin:0}' +
-    'select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccc;' +
-    'border-radius:8px;font-size:15px;background:#fff}' +
-    'button{width:100%;padding:14px;border:0;border-radius:10px;background:#e64a19;color:#fff;' +
+    'select{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--field-border);' +
+    'border-radius:8px;font-size:15px;background:var(--field-bg);color:var(--fg)}' +
+    'button{width:100%;padding:14px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);' +
     'font-size:16px;font-weight:600;margin-top:4px}' +
-    'a{color:#e64a19}' +
+    'a{color:var(--accent)}' +
     '</style></head><body><div class="wrap">' +
     '<h1>Movie Times</h1><p class="sub">Theaters, showtimes and ratings near you.</p>' +
 
     '<div class="card"><label>SerpApi usage</label>' + usageRows + '</div>' +
 
     '<div class="card">' +
-    '<label>SerpApi key <span style="color:#e64a19">*</span></label>' +
+    '<label>SerpApi key <span style="color:var(--accent)">*</span></label>' +
     '<div class="hint">Required. Free key at <a href="https://serpapi.com/manage-api-key">serpapi.com</a> ' +
     '(100 searches/month free).</div>' +
     '<input type="text" id="serp" autocapitalize="off" autocorrect="off" spellcheck="false" ' +
