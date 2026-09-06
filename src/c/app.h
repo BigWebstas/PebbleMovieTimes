@@ -17,6 +17,7 @@ typedef struct {
   char rating[RATING_LEN];   // Google star rating, e.g. "4.3" (may be empty)
   char distance[DIST_LEN];   // e.g. "1.2 mi" (may be empty)
   bool favorite;             // pinned to the top of the list by the user
+  int  wire_idx;             // position in the phone's list, before favorites re-sort
 } Theater;
 
 typedef struct {

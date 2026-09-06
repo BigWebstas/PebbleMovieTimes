@@ -59,6 +59,8 @@ static void parse_theaters(const char *payload) {
     if (rec_end > p) {
       Theater *t = &g_theaters[g_theater_count];
       t->name[0] = t->rating[0] = t->distance[0] = '\0';
+      t->favorite = false;
+      t->wire_idx = g_theater_count;
 
       const char *cur = p;
       const char *fs, *fe;
@@ -193,6 +195,8 @@ void request_theaters(bool force) {
   watchdog_start();
 }
 
+// theater_idx is the row in the on-watch list, which favorites_apply() may have
+// re-sorted. The phone's list is in the original order, so send wire_idx.
 void request_movies(int theater_idx, bool force) {
   g_selected_theater = theater_idx;
   g_state = STATE_LOADING_MOVIES;
@@ -200,10 +204,13 @@ void request_movies(int theater_idx, bool force) {
   g_movie_count = 0;
   movies_window_reload();
 
+  int wire_idx = (theater_idx >= 0 && theater_idx < g_theater_count)
+                 ? g_theaters[theater_idx].wire_idx : theater_idx;
+
   DictionaryIterator *out;
   if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
   dict_write_cstring(out, MESSAGE_KEY_REQUEST, "movies");
-  dict_write_int32(out, MESSAGE_KEY_THEATER_IDX, theater_idx);
+  dict_write_int32(out, MESSAGE_KEY_THEATER_IDX, wire_idx);
   dict_write_int32(out, MESSAGE_KEY_FORCE, force ? 1 : 0);
   app_message_outbox_send();
   watchdog_start();
