@@ -382,18 +382,21 @@ function loadShowtimes(theater, opts, done) {
 
   // Google only renders the showtimes box for some query shapes. `location` is
   // omitted on purpose (SerpApi 400s on strings it can't resolve); the city
-  // goes in `q` instead.
-  var attempts = opts.prefetch
-    ? [base + ' showtimes', base]
-    : [base + ' showtimes', base, theater.name + ' showtimes'];
+  // goes in `q` instead. Prefetch tries the same shapes - a narrower list just
+  // caches a false NO_SHOWTIMES for theaters that need the last one.
+  var attempts = [base + ' showtimes', base, theater.name + ' showtimes'];
   var timeout = opts.prefetch ? 8000 : 15000;
   var seenKeys = {};
+  var hadCleanResponse = false;   // did Google actually answer, box or not?
 
   function run(i) {
     if (opts.prefetch && state.inFlight) { done('aborted'); return; }  // yield to the user
 
     if (i >= attempts.length) {
-      cacheSet(cacheKey, NO_SHOWTIMES);
+      // Only remember "no showtimes" when every attempt got a clean reply. A
+      // timeout, a SerpApi error, or a spent quota must not poison the cache -
+      // that's what leaves a theater blank for the rest of the day.
+      if (hadCleanResponse) cacheSet(cacheKey, NO_SHOWTIMES);
       var diag = Object.keys(seenKeys).join(',') || 'nothing';
       done('No showtimes for ' + theater.name + '. Google returned: ' + diag);
       return;
@@ -407,6 +410,7 @@ function loadShowtimes(theater, opts, done) {
         run(i + 1);
         return;
       }
+      hadCleanResponse = true;
       for (var kk in data) { if (data.hasOwnProperty(kk)) seenKeys[kk] = 1; }
 
       var movies = P.extractMovies(data).slice(0, MAX_MOVIES);
@@ -620,3 +624,15 @@ Pebble.addEventListener('webviewclosed', function (e) {
     fetchTheaters(true);
   }
 });
+
+// Exposed for test/showtimes.test.js. The Pebble runtime ignores the entry
+// point's exports, so this is inert on the watch.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    loadShowtimes: loadShowtimes,
+    moviesCacheKey: moviesCacheKey,
+    NO_SHOWTIMES: NO_SHOWTIMES,
+    _cacheGet: cacheGet,
+    _state: state,
+  };
+}
