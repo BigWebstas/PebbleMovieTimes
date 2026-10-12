@@ -11,3 +11,4 @@ node_modules/
 !resources/**/*.png
 !docs/screenshots/*.png
 GEMINI.md
+.claude/
